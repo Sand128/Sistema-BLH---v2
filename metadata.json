@@ -1,0 +1,5 @@
+{
+  "name": "BLH - Sistema de Gestión",
+  "description": "Sistema administrativo para Banco de Leche Humana: Gestión de donadoras, autenticación y métricas.",
+  "requestFramePermissions": []
+}
