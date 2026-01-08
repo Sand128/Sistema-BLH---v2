@@ -24,6 +24,18 @@ export interface InadequateReportData {
   responsable: string;
 }
 
+export interface DonorsDetailedReportData {
+  periodo: string;
+  año: number;
+  donadoras: any[];
+  stats: {
+    total: number;
+    aptas: number;
+    noAptas: number;
+  };
+  responsable: string;
+}
+
 export const pdfService = {
   formatStaffName: (fullName: string): string => {
     const cleanName = fullName.replace(/^(Dra\.|Dr\.|Enf\.|Lic\.|Q\.F\.B\.)\s+/i, '').trim();
@@ -35,39 +47,37 @@ export const pdfService = {
   },
 
   /**
-   * REPORTE: Frecuencia Mensual de Muestras Inadecuadas
+   * REPORTE: Listado Detallado de Donadoras Registradas
    */
-  generateInadequateSamplesReport: async (data: InadequateReportData): Promise<Uint8Array> => {
+  generateDonorsDetailedReport: async (data: DonorsDetailedReportData): Promise<Uint8Array> => {
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([792, 612]); // Horizontal (Landscape)
+    const page = pdfDoc.addPage([612, 792]); // Vertical
     const { width, height } = page.getSize();
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const form = pdfDoc.getForm();
+    const margin = 50;
+    let y = height - 50;
 
-    const margin = 40;
-    let y = height - 40;
-
-    // Header
-    page.drawText('BANCO DE LECHE HUMANA | REPORTE DE CALIDAD', { x: margin, y, size: 10, font: fontBold, color: rgb(0.5, 0.5, 0.5) });
+    // Header Institucional
+    page.drawText('ISEM | BANCO DE LECHE HUMANA', { x: margin, y, size: 10, font: fontBold, color: rgb(0.6, 0, 0.2) });
     y -= 25;
-    page.drawText('FRECUENCIA MENSUAL DE MUESTRAS INADECUADAS', { x: margin, y, size: 16, font: fontBold });
-    y -= 20;
-    page.drawText(`Período: ${data.rangoFechas}`, { x: margin, y, size: 11, font: fontRegular });
+    page.drawText('REPORTE DE CAPTACIÓN DE DONADORAS', { x: margin, y, size: 14, font: fontBold });
+    y -= 18;
+    page.drawText(`Período: ${data.periodo} - ${data.año}`, { x: margin, y, size: 10, font: fontRegular });
     
-    // Meta Fields (Editables)
-    y -= 30;
-    page.drawText('Unidad Médica:', { x: margin, y, size: 10, font: fontBold });
-    const unidadField = form.createTextField('unidad_medica');
-    unidadField.setText(data.unidadMedica);
-    unidadField.addToPage(page, { x: margin + 85, y: y - 3, width: 300, height: 15 });
+    // Stats Summary Box
+    y -= 40;
+    page.drawRectangle({ x: margin, y: y - 50, width: width - (margin * 2), height: 60, color: rgb(0.98, 0.95, 0.96), borderColor: rgb(0.9, 0.8, 0.8), borderWidth: 1 });
+    page.drawText('RESUMEN DE REGISTROS', { x: margin + 10, y: y - 5, size: 9, font: fontBold });
+    page.drawText(`Total Registradas: ${data.stats.total}`, { x: margin + 10, y: y - 25, size: 9, font: fontRegular });
+    page.drawText(`Aptas: ${data.stats.aptas}`, { x: margin + 120, y: y - 25, size: 9, font: fontRegular });
+    page.drawText(`No Aptas: ${data.stats.noAptas}`, { x: margin + 230, y: y - 25, size: 9, font: fontRegular });
+    
+    y -= 70;
 
     // Table Header
-    y -= 40;
-    const colWidths = [70, 100, 80, 60, 120, 80, 140, 60];
-    const headers = ['FECHA', 'UNIDAD', 'TIPO DON.', 'FRASCOS', 'MOTIVO RECHAZO', 'ESTADO', 'OBSERVACIONES', 'VOL. ml'];
-    
-    // Draw Header Background
+    const colWidths = [80, 180, 100, 80, 80];
+    const headers = ['FOLIO', 'NOMBRE COMPLETO', 'REGISTRO', 'ESTATUS', 'TIPO'];
     page.drawRectangle({ x: margin, y: y - 5, width: width - (margin * 2), height: 20, color: rgb(0.9, 0.9, 0.9) });
     
     let currentX = margin;
@@ -78,60 +88,77 @@ export const pdfService = {
 
     y -= 20;
 
-    // Rows
-    data.rows.forEach((row, rowIndex) => {
-      if (y < 80) return; // Simple overflow check
+    // Donor Rows
+    data.donadoras.forEach((d, idx) => {
+      if (y < 100) return; // Prevent overflow for demo
       currentX = margin;
-      const rowData = [
-        row.fecha,
-        row.unidad,
-        row.tipoDonadora,
-        row.cantidad.toString(),
-        row.motivo,
-        row.estadoFinal,
-        row.observaciones.substring(0, 30),
-        row.volumen.toString()
-      ];
-
-      // Zebra striping
-      if (rowIndex % 2 === 0) {
+      if (idx % 2 === 0) {
         page.drawRectangle({ x: margin, y: y - 12, width: width - (margin * 2), height: 18, color: rgb(0.97, 0.97, 0.97) });
       }
+      
+      const rowData = [
+        d.folio || 'N/A',
+        `${d.firstName} ${d.lastName}`.toUpperCase(),
+        d.registrationDate,
+        d.status === 'ACTIVE' ? 'APTA' : 'NO APTA',
+        d.donorCategory || 'EXTERNA'
+      ];
 
+      rowData.forEach((val, i) => {
+        page.drawText(val.toString(), { x: currentX + 5, y: y - 5, size: 8, font: fontRegular });
+        currentX += colWidths[i];
+      });
+      y -= 18;
+    });
+
+    // Signature Area
+    const sigY = 80;
+    page.drawLine({ start: { x: width/2 - 100, y: sigY + 20 }, end: { x: width/2 + 100, y: sigY + 20 }, thickness: 1 });
+    page.drawText('RESPONSABLE DE CAPTACIÓN', { x: width/2 - 70, y: sigY + 5, size: 8, font: fontBold });
+    page.drawText(data.responsable.toUpperCase(), { x: width/2 - 80, y: sigY - 10, size: 9, font: fontRegular });
+
+    return await pdfDoc.save();
+  },
+
+  generateInadequateSamplesReport: async (data: InadequateReportData): Promise<Uint8Array> => {
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([792, 612]); 
+    const { width, height } = page.getSize();
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const form = pdfDoc.getForm();
+    const margin = 40;
+    let y = height - 40;
+
+    page.drawText('BANCO DE LECHE HUMANA | REPORTE DE CALIDAD', { x: margin, y, size: 10, font: fontBold, color: rgb(0.5, 0.5, 0.5) });
+    y -= 25;
+    page.drawText('FRECUENCIA MENSUAL DE MUESTRAS INADECUADAS', { x: margin, y, size: 16, font: fontBold });
+    y -= 20;
+    page.drawText(`Período: ${data.rangoFechas}`, { x: margin, y, size: 11, font: fontRegular });
+    
+    y -= 40;
+    const colWidths = [70, 100, 80, 60, 120, 80, 140, 60];
+    const headers = ['FECHA', 'UNIDAD', 'TIPO DON.', 'FRASCOS', 'MOTIVO RECHAZO', 'ESTADO', 'OBSERVACIONES', 'VOL. ml'];
+    page.drawRectangle({ x: margin, y: y - 5, width: width - (margin * 2), height: 20, color: rgb(0.9, 0.9, 0.9) });
+    
+    let currentX = margin;
+    headers.forEach((h, i) => {
+      page.drawText(h, { x: currentX + 5, y, size: 8, font: fontBold });
+      currentX += colWidths[i];
+    });
+
+    y -= 20;
+    data.rows.forEach((row, rowIndex) => {
+      if (y < 80) return;
+      currentX = margin;
+      const rowData = [row.fecha, row.unidad, row.tipoDonadora, row.cantidad.toString(), row.motivo, row.estadoFinal, row.observaciones.substring(0, 20), row.volumen.toString()];
+      if (rowIndex % 2 === 0) page.drawRectangle({ x: margin, y: y - 12, width: width - (margin * 2), height: 18, color: rgb(0.97, 0.97, 0.97) });
       rowData.forEach((val, i) => {
         page.drawText(val, { x: currentX + 5, y: y - 5, size: 8, font: fontRegular });
         currentX += colWidths[i];
       });
       y -= 18;
     });
-
-    // Summary Box
-    y -= 40;
-    const summaryX = width - 300;
-    page.drawRectangle({ x: summaryX, y: y - 60, width: 260, height: 80, color: rgb(0.95, 0.98, 1), borderColor: rgb(0.8, 0.8, 0.9), borderWidth: 1 });
-    
-    let sy = y;
-    page.drawText('RESUMEN ESTADÍSTICO', { x: summaryX + 10, y: sy, size: 10, font: fontBold, color: rgb(0.1, 0.3, 0.5) });
-    sy -= 18;
-    page.drawText(`Total Muestras Analizadas: ${data.stats.totalAnalizadas}`, { x: summaryX + 10, y: sy, size: 9, font: fontRegular });
-    sy -= 14;
-    page.drawText(`Total Muestras Inadecuadas: ${data.stats.totalInadecuadas}`, { x: summaryX + 10, y: sy, size: 9, font: fontRegular });
-    sy -= 14;
-    page.drawText(`Porcentaje de Rechazo: ${data.stats.porcentajeRechazo.toFixed(2)}%`, { x: summaryX + 10, y: sy, size: 10, font: fontBold, color: data.stats.porcentajeRechazo > 10 ? rgb(0.8, 0, 0) : rgb(0, 0.5, 0) });
-
-    // Alertas
-    if (data.stats.porcentajeRechazo > 5) {
-        page.drawText('ALERTA: Tasa de rechazo superior al umbral permitido.', { x: margin, y: sy, size: 9, font: fontBold, color: rgb(0.8, 0, 0) });
-        page.drawText(`Causa recurrente: ${data.stats.causaPrincipal}`, { x: margin, y: sy - 14, size: 9, font: fontRegular });
-    }
-
-    // Signatures
-    const sigY = 60;
-    page.drawText('Responsable de Verificación', { x: margin, y: sigY + 20, size: 10, font: fontBold });
-    page.drawLine({ start: { x: margin, y: sigY + 18 }, end: { x: margin + 200, y: sigY + 18 }, thickness: 1 });
-    const respField = form.createTextField('responsable_firma');
-    respField.setText(data.responsable.toUpperCase());
-    respField.addToPage(page, { x: margin, y: sigY, width: 200, height: 15 });
 
     return await pdfDoc.save();
   },
@@ -151,38 +178,7 @@ export const pdfService = {
     const unidadField = form.createTextField('unidad_medica');
     unidadField.setText(data.unidadMedica);
     unidadField.addToPage(page, { x: margin + 80, y: currentY - 2, width: 250, height: 15 });
-    page.drawText('Fecha:', { x: margin + 350, y: currentY, size: 10, font: fontRegular });
-    const fechaField = form.createTextField('fecha');
-    fechaField.setText(data.fecha);
-    fechaField.addToPage(page, { x: margin + 390, y: currentY - 2, width: 80, height: 15 });
-    currentY -= 40;
-    const text1 = 'Con fundamento en la Ley General de Salud, y en la Ley para la Protección, Apoyo y Promoción a la Lactancia Materna del Estado de México.';
-    page.drawText(text1, { x: margin, y: currentY, size: 10, font: fontRegular, maxWidth: width - (margin * 2) });
-    currentY -= 30;
-    page.drawText('La que suscribe Sra.', { x: margin, y: currentY, size: 10, font: fontRegular });
-    const nombreField = form.createTextField('nombre_donadora');
-    nombreField.setText(data.nombreDonadora.toUpperCase());
-    nombreField.addToPage(page, { x: margin + 95, y: currentY - 2, width: 300, height: 15 });
-    currentY -= 20;
-    const text2 = 'en forma voluntaria y sin ninguna presión o inducción consiento donar una o varias muestras de leche materna...';
-    page.drawText(text2, { x: margin, y: currentY, size: 10, font: fontRegular, maxWidth: width - (margin * 2), lineHeight: 14 });
-    currentY -= 28;
-    page.drawText('sí:', { x: margin, y: currentY, size: 10, font: fontRegular });
-    const checkSi = form.createCheckBox('consentimiento_si');
-    if (data.consentimientoSi) checkSi.check();
-    checkSi.addToPage(page, { x: margin + 20, y: currentY - 2, width: 12, height: 12 });
-    page.drawText('no:', { x: margin + 50, y: currentY, size: 10, font: fontRegular });
-    const checkNo = form.createCheckBox('consentimiento_no');
-    if (!data.consentimientoSi) checkNo.check();
-    checkNo.addToPage(page, { x: margin + 70, y: currentY - 2, width: 12, height: 12 });
-    currentY -= 40;
-    const sigY = 100;
-    const firmaDonadora = form.createTextField('firma_donadora');
-    firmaDonadora.setText(data.nombreDonadora.toUpperCase());
-    firmaDonadora.addToPage(page, { x: margin, y: sigY, width: 220, height: 15 });
-    const personalSalud = form.createTextField('personal_salud');
-    personalSalud.setText(data.personalSalud.toUpperCase());
-    personalSalud.addToPage(page, { x: width - 280, y: sigY, width: 220, height: 15 });
+    
     return await pdfDoc.save();
   },
 
@@ -194,28 +190,5 @@ export const pdfService = {
     document.body.append(link);
     link.click();
     link.remove();
-  },
-
-  generateConsentPdf: async (donorName: string): Promise<Uint8Array> => {
-      return pdfService.generateOfficialConsent({
-          unidadMedica: 'Banco de Leche Humana',
-          fecha: new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: '2-digit' }),
-          nombreDonadora: donorName,
-          consentimientoSi: true,
-          personalSalud: 'Personal de Salud'
-      });
-  },
-
-  saveTemplate: async (file: File): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = (reader.result as string).split(',')[1];
-        localStorage.setItem(PDF_TEMPLATE_KEY, base64);
-        resolve();
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
   }
 };
