@@ -1,3 +1,4 @@
+
 import { Donor, Batch, Bottle, QualityControlRecord, Recipient, AdministrationRecord, PathologyDetail, LabTestDetail } from '../types';
 
 const getDefaultPathologies = (): PathologyDetail[] => [
@@ -70,7 +71,9 @@ export const MOCK_DONORS: Donor[] = [
     donationReason: 'SURPLUS',
     donorCategory: 'EXTERNAL',
     interviewerName: 'Enf. Carla Ruiz',
-    elaboratorName: 'Enf. Carla Ruiz'
+    elaboratorName: 'Enf. Carla Ruiz',
+    // Added missing obstetricEventType
+    obstetricEventType: 'PARTO'
   },
   {
     id: '2',
@@ -124,7 +127,9 @@ export const MOCK_DONORS: Donor[] = [
     donationReason: 'SURPLUS',
     donorCategory: 'EXTERNAL',
     interviewerName: 'Enf. Carla Ruiz',
-    elaboratorName: 'Enf. Carla Ruiz'
+    elaboratorName: 'Enf. Carla Ruiz',
+    // Added missing obstetricEventType
+    obstetricEventType: 'PARTO'
   },
   {
     id: '3',
@@ -182,7 +187,9 @@ export const MOCK_DONORS: Donor[] = [
     donationReason: 'SURPLUS',
     donorCategory: 'HOME',
     interviewerName: 'Dra. Elena Torres',
-    elaboratorName: 'Dra. Elena Torres'
+    elaboratorName: 'Dra. Elena Torres',
+    // Added missing obstetricEventType
+    obstetricEventType: 'PARTO'
   },
   {
     id: '4',
@@ -233,7 +240,9 @@ export const MOCK_DONORS: Donor[] = [
     donationReason: 'SURPLUS',
     donorCategory: 'EXTERNAL',
     interviewerName: 'Enf. Carla Ruiz',
-    elaboratorName: 'Enf. Carla Ruiz'
+    elaboratorName: 'Enf. Carla Ruiz',
+    // Added missing obstetricEventType
+    obstetricEventType: 'PARTO'
   },
   {
     id: '5',
@@ -285,7 +294,9 @@ export const MOCK_DONORS: Donor[] = [
     donationReason: 'SURPLUS',
     donorCategory: 'INTERNAL',
     interviewerName: 'Dra. Elena Torres',
-    elaboratorName: 'Dra. Elena Torres'
+    elaboratorName: 'Dra. Elena Torres',
+    // Added missing obstetricEventType
+    obstetricEventType: 'CESAREA'
   }
 ];
 
@@ -299,7 +310,8 @@ export const MOCK_BOTTLES: Bottle[] = [
     status: 'ASSIGNED', 
     batchId: 'l2',
     traceabilityCode: 'HE20L23001-HMPMPS',
-    hospitalInitials: 'HMPMPS'
+    hospitalInitials: 'HMPMPS',
+    milkType: 'MADURA'
   },
   { 
     id: 'b2', 
@@ -309,7 +321,8 @@ export const MOCK_BOTTLES: Bottle[] = [
     volume: 180, 
     status: 'COLLECTED',
     traceabilityCode: 'HE21L23002-HMPMPS',
-    hospitalInitials: 'HMPMPS' 
+    hospitalInitials: 'HMPMPS',
+    milkType: 'MADURA'
   },
   { 
     id: 'b3', 
@@ -320,7 +333,8 @@ export const MOCK_BOTTLES: Bottle[] = [
     status: 'ASSIGNED', 
     batchId: 'l2',
     traceabilityCode: 'HE22L23003-HMPMPS',
-    hospitalInitials: 'HMPMPS'
+    hospitalInitials: 'HMPMPS',
+    milkType: 'MADURA'
   },
   { 
     id: 'b4', 
@@ -330,7 +344,8 @@ export const MOCK_BOTTLES: Bottle[] = [
     volume: 160, 
     status: 'COLLECTED',
     traceabilityCode: 'HE23L23004-HMPMPS',
-    hospitalInitials: 'HMPMPS' 
+    hospitalInitials: 'HMPMPS',
+    milkType: 'MADURA'
   },
   { 
     id: 'b5', 
@@ -341,7 +356,8 @@ export const MOCK_BOTTLES: Bottle[] = [
     status: 'ASSIGNED', 
     batchId: 'l1',
     traceabilityCode: 'HE10K23005-HMPMPS',
-    hospitalInitials: 'HMPMPS' 
+    hospitalInitials: 'HMPMPS',
+    milkType: 'MADURA'
   },
   { 
     id: 'b6', 
@@ -352,7 +368,8 @@ export const MOCK_BOTTLES: Bottle[] = [
     status: 'ASSIGNED', 
     batchId: 'l3',
     traceabilityCode: 'HO05J23006-HMPMPS',
-    hospitalInitials: 'HMPMPS' 
+    hospitalInitials: 'HMPMPS',
+    milkType: 'MADURA'
   },
   { 
     id: 'b7', 
@@ -363,7 +380,8 @@ export const MOCK_BOTTLES: Bottle[] = [
     status: 'ASSIGNED', 
     batchId: 'l4',
     traceabilityCode: 'HE15I23007-HMPMPS',
-    hospitalInitials: 'HMPMPS' 
+    hospitalInitials: 'HMPMPS',
+    milkType: 'MADURA'
   },
 ];
 

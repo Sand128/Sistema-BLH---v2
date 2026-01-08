@@ -1,324 +1,273 @@
 
 import React, { useState, useEffect } from 'react';
-import { Download, Printer, Filter, Calendar, FileUp, Check } from 'lucide-react';
+import { 
+    Download, Calendar, FileWarning, Loader2, AlertCircle, 
+    ChevronUp, ChevronDown, Hospital, UserCheck, Percent 
+} from 'lucide-react';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { donorService } from '../services/donorService';
-import { batchService } from '../services/batchService';
-import { reportService } from '../services/reportService';
+import { reportService, MonthlyFrequencyRow } from '../services/reportService';
 import { pdfService } from '../services/pdfService';
-import { Donor, Batch } from '../types';
-
-type ReportTab = 'DONORS' | 'PRODUCTION' | 'DISTRIBUTION';
+import { authService } from '../services/authService';
 
 export const Reports: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ReportTab>('DONORS');
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const currentUser = authService.getCurrentUser();
   
   // Data States
-  const [donors, setDonors] = useState<Donor[]>([]);
-  const [batches, setBatches] = useState<Batch[]>([]);
+  const [frequencyData, setFrequencyData] = useState<MonthlyFrequencyRow[]>([]);
+  const [filteredFreq, setFilteredFreq] = useState<MonthlyFrequencyRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
-  // Template Upload State
-  const [uploadingTemplate, setUploadingTemplate] = useState(false);
-  const [templateSuccess, setTemplateSuccess] = useState(false);
+  // Sorting
+  const [sortKey, setSortKey] = useState<keyof MonthlyFrequencyRow>('mes_anio');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  // Specific Filters
+  const [unitFilter, setUnitFilter] = useState('');
+  const [responsibleFilter, setResponsibleFilter] = useState('');
 
   useEffect(() => {
-    // Ideally fetch based on date range, here we fetch all and filter client side for V1
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [dData, bData] = await Promise.all([
-          donorService.getAll(),
-          batchService.getAll()
-        ]);
-        setDonors(dData);
-        setBatches(bData);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
-  }, []);
+  }, [startDate, endDate]);
 
-  // Filter Logic
-  const filteredDonors = donors.filter(d => 
-    d.registrationDate >= startDate && d.registrationDate <= endDate
-  );
-  
-  const filteredBatches = batches.filter(b => 
-    b.creationDate >= startDate && b.creationDate <= endDate
-  );
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleExport = () => {
-    if (activeTab === 'DONORS') {
-      const exportData = filteredDonors.map(d => ({
-        ID: d.id,
-        Nombre: `${d.firstName} ${d.lastName}`,
-        Email: d.email,
-        Telefono: d.phone,
-        FechaRegistro: d.registrationDate,
-        Estado: d.status,
-        TipoSangre: d.bloodType
-      }));
-      reportService.downloadCSV(exportData, `Reporte_Donadoras_${startDate}_${endDate}`);
-    } else if (activeTab === 'PRODUCTION') {
-      const exportData = filteredBatches.map(b => ({
-        Lote: b.batchNumber,
-        Fecha: b.creationDate,
-        Tipo: b.type,
-        VolumenTotal: b.totalVolume,
-        Frascos: b.bottleCount,
-        Estado: b.status
-      }));
-      reportService.downloadCSV(exportData, `Reporte_Produccion_${startDate}_${endDate}`);
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const fData = await reportService.getMonthlyFrequencyTable(startDate, endDate);
+      setFrequencyData(fData);
+      setFilteredFreq(fData);
+    } catch (error) {
+      console.error("Error al consolidar datos de análisis:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleTemplateUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (e.target.files && e.target.files[0]) {
-          setUploadingTemplate(true);
-          setTemplateSuccess(false);
-          try {
-              await pdfService.saveTemplate(e.target.files[0]);
-              setTemplateSuccess(true);
-              setTimeout(() => setTemplateSuccess(false), 3000);
-          } catch (error) {
-              alert('Error al subir la plantilla.');
-          } finally {
-              setUploadingTemplate(false);
-          }
+  useEffect(() => {
+      let filtered = [...frequencyData];
+      if (unitFilter) {
+          filtered = filtered.filter(f => f.unidad_medica.toLowerCase().includes(unitFilter.toLowerCase()));
+      }
+      if (responsibleFilter) {
+          filtered = filtered.filter(f => f.responsable.toLowerCase().includes(responsibleFilter.toLowerCase()));
+      }
+      
+      // Apply Sort
+      filtered.sort((a, b) => {
+          const valA = a[sortKey];
+          const valB = b[sortKey];
+          if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+          if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+          return 0;
+      });
+
+      setFilteredFreq(filtered);
+  }, [unitFilter, responsibleFilter, sortKey, sortOrder, frequencyData]);
+
+  const handleSort = (key: keyof MonthlyFrequencyRow) => {
+      if (sortKey === key) {
+          setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      } else {
+          setSortKey(key);
+          setSortOrder('asc');
       }
   };
 
+  const handleInadequateReport = async () => {
+    setGeneratingPdf(true);
+    try {
+      const data = await reportService.getInadequateSamplesData(startDate, endDate);
+      const pdfBytes = await pdfService.generateInadequateSamplesReport({
+        rangoFechas: `${startDate} al ${endDate}`,
+        unidadMedica: 'HMPMPS - TOLUCA',
+        rows: data.rows,
+        stats: {
+          totalAnalizadas: data.totalAnalizadas,
+          totalInadecuadas: data.totalInadecuadas,
+          porcentajeRechazo: data.porcentajeRechazo,
+          causaPrincipal: data.causaPrincipal
+        },
+        responsable: currentUser?.name || 'Responsable de Verificación'
+      });
+      const dateObj = new Date(startDate);
+      const filename = `Frecuencia_Mensual_Muestras_Inadecuadas_${dateObj.getMonth() + 1}-${dateObj.getFullYear()}.pdf`;
+      pdfService.downloadPdf(pdfBytes, filename);
+    } catch (error) {
+      console.error(error);
+      alert('Error al generar el reporte oficial.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const SortIcon = ({ col }: { col: keyof MonthlyFrequencyRow }) => {
+      if (sortKey !== col) return <div className="w-4 h-4 opacity-20"><ChevronUp className="h-4 w-4" /></div>;
+      return sortOrder === 'asc' ? <ChevronUp className="h-4 w-4 text-primary-500" /> : <ChevronDown className="h-4 w-4 text-primary-500" />;
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
+    <div className="space-y-6 pb-12">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reportes y Análisis</h1>
-          <p className="mt-1 text-sm text-gray-500">Generación de informes institucionales.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900">Reportes</h1>
+          <p className="mt-1 text-sm text-slate-500">Gestión de indicadores de calidad y consolidación mensual de muestras inadecuadas.</p>
         </div>
-        <div className="flex gap-2">
-           <Button variant="outline" onClick={handlePrint}>
-             <Printer className="h-4 w-4 mr-2" />
-             Imprimir / PDF
-           </Button>
-           <Button onClick={handleExport}>
-             <Download className="h-4 w-4 mr-2" />
-             Exportar Excel
+        <div className="flex flex-wrap gap-2">
+           <Button onClick={handleInadequateReport} isLoading={generatingPdf} className="bg-primary-600 hover:bg-primary-700 shadow-lg shadow-primary-100">
+             <Download className="h-4 w-4 mr-2" /> Exportar Formato Oficial (PDF)
            </Button>
         </div>
       </div>
 
-      {/* Admin Config Section (Only visible on screen) */}
-      <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 no-print flex items-center justify-between">
+      {/* Primary Filters */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
           <div>
-              <h3 className="text-sm font-bold text-slate-800">Configuración de Documentos</h3>
-              <p className="text-xs text-slate-500">Actualizar plantilla base para Consentimiento Informado.</p>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Periodo Desde</label>
+            <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full rounded-md border-slate-300 bg-slate-50 p-2.5 border" />
           </div>
-          <div className="flex items-center gap-3">
-              {templateSuccess && <span className="text-xs text-green-600 font-bold flex items-center"><Check className="h-3 w-3 mr-1"/> Actualizado</span>}
-              <label className="cursor-pointer inline-flex items-center justify-center px-4 py-2 border border-slate-300 shadow-sm text-sm font-medium rounded-md text-slate-700 bg-white hover:bg-slate-50">
-                  <FileUp className="h-4 w-4 mr-2 text-slate-500" />
-                  {uploadingTemplate ? 'Subiendo...' : 'Subir Plantilla PDF'}
-                  <input type="file" accept="application/pdf" className="hidden" onChange={handleTemplateUpload} disabled={uploadingTemplate} />
-              </label>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Hasta</label>
+            <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full rounded-md border-slate-300 bg-slate-50 p-2.5 border" />
           </div>
-      </div>
-
-      {/* Filters Toolbar */}
-      <div className="bg-white p-4 rounded-lg shadow border border-gray-200 no-print">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="w-full sm:w-auto">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Fecha Inicio</label>
-            <input 
-              type="date" 
-              value={startDate} 
-              onChange={(e) => setStartDate(e.target.value)}
-              className="block w-full rounded-md border-[#C6C6C6] bg-[#F2F4F7] text-[#333333] shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border"
-            />
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Unidad Médica</label>
+            <div className="relative">
+                <Hospital className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                <input type="text" placeholder="Filtrar unidad..." value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="w-full pl-9 rounded-md border-slate-300 bg-white p-2.5 border text-sm" />
+            </div>
           </div>
-          <div className="w-full sm:w-auto">
-            <label className="block text-xs font-medium text-gray-700 mb-1">Fecha Fin</label>
-            <input 
-              type="date" 
-              value={endDate} 
-              onChange={(e) => setEndDate(e.target.value)}
-              className="block w-full rounded-md border-[#C6C6C6] bg-[#F2F4F7] text-[#333333] shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm p-2 border"
-            />
-          </div>
-          <div className="flex-1" />
-          <div className="text-sm text-gray-500">
-             Mostrando datos del <strong>{startDate}</strong> al <strong>{endDate}</strong>
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Responsable</label>
+            <div className="relative">
+                <UserCheck className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
+                <input type="text" placeholder="Filtrar responsable..." value={responsibleFilter} onChange={(e) => setResponsibleFilter(e.target.value)} className="w-full pl-9 rounded-md border-slate-300 bg-white p-2.5 border text-sm" />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 no-print">
-        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-          <button
-            onClick={() => setActiveTab('DONORS')}
-            className={`${
-              activeTab === 'DONORS'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Donadoras
-          </button>
-          <button
-            onClick={() => setActiveTab('PRODUCTION')}
-            className={`${
-              activeTab === 'PRODUCTION'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Producción y Calidad
-          </button>
-           <button
-            onClick={() => setActiveTab('DISTRIBUTION')}
-            className={`${
-              activeTab === 'DISTRIBUTION'
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-          >
-            Distribución (Simulado)
-          </button>
-        </nav>
-      </div>
-
-      {/* Report Content */}
-      <div className="bg-white shadow rounded-lg border border-gray-200 min-h-[500px] p-6 print:shadow-none print:border-none">
-        
-        {/* Header for Print */}
-        <div className="hidden print:block mb-8 border-b pb-4">
-            <h1 className="text-2xl font-bold">Banco de Leche Humana - Reporte Institucional</h1>
-            <p className="text-sm">Período: {startDate} - {endDate}</p>
-            <p className="text-sm">Generado el: {new Date().toLocaleString()}</p>
-        </div>
-
+      {/* Main Consolidated Table */}
+      <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-6 min-h-[500px]">
         {loading ? (
-           <p className="text-center text-gray-500 py-10">Generando reporte...</p>
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <Loader2 className="h-10 w-10 text-primary-500 animate-spin" />
+                <p className="text-slate-500 font-medium">Consolidando registros de análisis...</p>
+            </div>
         ) : (
-          <>
-            {activeTab === 'DONORS' && (
-              <div className="space-y-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Registro de Nuevas Donadoras</h3>
-                <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-                  <table className="min-w-full divide-y divide-gray-300">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Nombre</th>
-                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Tipo Sangre</th>
-                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Fecha Registro</th>
-                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 bg-white">
-                      {filteredDonors.length === 0 ? (
-                        <tr><td colSpan={4} className="p-4 text-center text-gray-500">No hay datos en este período</td></tr>
-                      ) : filteredDonors.map((d) => (
-                        <tr key={d.id}>
-                          <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{d.firstName} {d.lastName}</td>
-                          <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{d.bloodType}</td>
-                          <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{d.registrationDate}</td>
-                          <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{d.status}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            <div className="space-y-6">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <FileWarning className="h-5 w-5 text-orange-500" />
+                        Frecuencia Mensual de Muestras Inadecuadas
+                    </h3>
+                    <div className="flex items-center gap-2 text-xs font-medium text-slate-500 bg-slate-50 px-3 py-1.5 rounded-full border border-slate-100">
+                        <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                        Solo lectura: Datos sincronizados con el módulo de Análisis.
+                    </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4 mt-6 print:grid-cols-3">
-                   <div className="bg-gray-50 p-4 rounded border">
-                      <p className="text-sm text-gray-500">Total Nuevas</p>
-                      <p className="text-2xl font-bold">{filteredDonors.length}</p>
-                   </div>
-                   <div className="bg-gray-50 p-4 rounded border">
-                      <p className="text-sm text-gray-500">Activas en Periodo</p>
-                      <p className="text-2xl font-bold">{filteredDonors.filter(d => d.status === 'ACTIVE').length}</p>
-                   </div>
-                </div>
-              </div>
-            )}
 
-            {activeTab === 'PRODUCTION' && (
-              <div className="space-y-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Producción de Lotes</h3>
-                <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
-                  <table className="min-w-full divide-y divide-gray-300">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Lote</th>
-                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Fecha</th>
-                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Tipo</th>
-                        <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Volumen</th>
-                         <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Estado</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 bg-white">
-                      {filteredBatches.length === 0 ? (
-                        <tr><td colSpan={5} className="p-4 text-center text-gray-500">No hay datos en este período</td></tr>
-                      ) : filteredBatches.map((b) => (
-                        <tr key={b.id}>
-                          <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{b.batchNumber}</td>
-                          <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{b.creationDate}</td>
-                          <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{b.type}</td>
-                          <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{b.totalVolume} ml</td>
-                          <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{b.status}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="overflow-x-auto rounded-xl border border-slate-200 shadow-sm">
+                    <table className="min-w-full divide-y divide-slate-200 text-xs">
+                        <thead className="bg-slate-50">
+                            <tr>
+                                <th onClick={() => handleSort('unidad_medica')} className="px-4 py-4 text-left font-bold text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors">
+                                    <div className="flex items-center gap-1">Unidad Médica / Responsable <SortIcon col="unidad_medica" /></div>
+                                </th>
+                                <th onClick={() => handleSort('mes_anio')} className="px-4 py-4 text-left font-bold text-slate-600 uppercase cursor-pointer hover:bg-slate-100 transition-colors">
+                                    <div className="flex items-center gap-1">Periodo <SortIcon col="mes_anio" /></div>
+                                </th>
+                                <th className="px-2 py-4 text-center font-bold text-red-600 uppercase bg-red-50/50">Acidez</th>
+                                <th className="px-2 py-4 text-center font-bold text-red-600 uppercase bg-red-50/50">Envase</th>
+                                <th className="px-2 py-4 text-center font-bold text-red-600 uppercase bg-red-50/50">Suciedad</th>
+                                <th className="px-2 py-4 text-center font-bold text-red-600 uppercase bg-red-50/50">Color/Flavor</th>
+                                <th className="px-2 py-4 text-center font-bold text-slate-800 uppercase border-l-2 border-slate-200">Total Inadecuadas</th>
+                                <th className="px-2 py-4 text-center font-bold text-slate-500 uppercase">Analizadas</th>
+                                <th className="px-4 py-4 text-right font-bold text-primary-600 uppercase">Responsable Verificación</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-slate-200">
+                            {filteredFreq.length === 0 ? (
+                                <tr><td colSpan={9} className="p-12 text-center text-slate-400 italic">No se encontraron registros en el periodo seleccionado.</td></tr>
+                            ) : filteredFreq.map((row, idx) => (
+                                <tr key={idx} className="hover:bg-slate-50 transition-colors group">
+                                    <td className="px-4 py-4 font-bold text-slate-900 whitespace-nowrap">
+                                        {row.unidad_medica}
+                                    </td>
+                                    <td className="px-4 py-4 font-medium text-slate-600 whitespace-nowrap">{row.mes_anio}</td>
+                                    
+                                    <td className="px-2 py-4 text-center bg-red-50/10">
+                                        <span className="block font-bold text-slate-900">{row.num_rechazos_acidez}</span>
+                                        <span className="text-[10px] text-red-500 font-bold">{row.porcentaje_acidez.toFixed(1)}%</span>
+                                    </td>
+                                    <td className="px-2 py-4 text-center bg-red-50/10">
+                                        <span className="block font-bold text-slate-900">{row.num_rechazos_envase}</span>
+                                        <span className="text-[10px] text-red-500 font-bold">{row.porcentaje_envase.toFixed(1)}%</span>
+                                    </td>
+                                    <td className="px-2 py-4 text-center bg-red-50/10">
+                                        <span className="block font-bold text-slate-900">{row.num_rechazos_suciedad}</span>
+                                        <span className="text-[10px] text-red-500 font-bold">{row.porcentaje_suciedad.toFixed(1)}%</span>
+                                    </td>
+                                    <td className="px-2 py-4 text-center bg-red-50/10">
+                                        <span className="block font-bold text-slate-900">{row.num_rechazos_color_flavor}</span>
+                                        <span className="text-[10px] text-red-500 font-bold">{row.porcentaje_color_flavor.toFixed(1)}%</span>
+                                    </td>
+
+                                    <td className="px-2 py-4 text-center border-l-2 border-slate-200 font-extrabold text-slate-900 bg-slate-50">
+                                        {row.total_muestras_inadecuadas}
+                                    </td>
+                                    <td className="px-2 py-4 text-center font-bold text-slate-500">
+                                        {row.total_muestras_analizadas}
+                                    </td>
+                                    <td className="px-4 py-4 text-right italic text-slate-600 whitespace-nowrap font-medium">
+                                        {row.responsable}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                        <tfoot className="bg-slate-900 text-white font-bold">
+                            <tr>
+                                <td colSpan={2} className="px-4 py-3 text-right uppercase">Totales Consolidados</td>
+                                <td className="px-2 py-3 text-center">{filteredFreq.reduce((s,r) => s + r.num_rechazos_acidez, 0)}</td>
+                                <td className="px-2 py-3 text-center">{filteredFreq.reduce((s,r) => s + r.num_rechazos_envase, 0)}</td>
+                                <td className="px-2 py-3 text-center">{filteredFreq.reduce((s,r) => s + r.num_rechazos_suciedad, 0)}</td>
+                                <td className="px-2 py-3 text-center">{filteredFreq.reduce((s,r) => s + r.num_rechazos_color_flavor, 0)}</td>
+                                <td className="px-2 py-3 text-center bg-primary-600">{filteredFreq.reduce((s,r) => s + r.total_muestras_inadecuadas, 0)}</td>
+                                <td className="px-2 py-3 text-center">{filteredFreq.reduce((s,r) => s + r.total_muestras_analizadas, 0)}</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                   <div className="bg-blue-50 p-4 rounded border border-blue-100">
-                      <p className="text-sm text-blue-800">Total Lotes</p>
-                      <p className="text-2xl font-bold text-blue-900">{filteredBatches.length}</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+                   <div className="p-4 rounded-xl bg-blue-50 border border-blue-100 flex items-center gap-4">
+                       <div className="p-3 bg-white rounded-lg shadow-sm"><Hospital className="h-6 w-6 text-blue-500" /></div>
+                       <div><p className="text-xs font-bold text-blue-400 uppercase">Muestras Analizadas</p><p className="text-2xl font-black text-blue-900">{filteredFreq.reduce((s,r) => s + r.total_muestras_analizadas, 0)}</p></div>
                    </div>
-                   <div className="bg-green-50 p-4 rounded border border-green-100">
-                      <p className="text-sm text-green-800">Volumen Procesado</p>
-                      <p className="text-2xl font-bold text-green-900">
-                        {filteredBatches.reduce((sum, b) => sum + b.totalVolume, 0) / 1000} L
-                      </p>
+                   <div className="p-4 rounded-xl bg-orange-50 border border-orange-100 flex items-center gap-4">
+                       <div className="p-3 bg-white rounded-lg shadow-sm"><FileWarning className="h-6 w-6 text-orange-500" /></div>
+                       <div><p className="text-xs font-bold text-orange-400 uppercase">Total Inadecuadas</p><p className="text-2xl font-black text-orange-900">{filteredFreq.reduce((s,r) => s + r.total_muestras_inadecuadas, 0)}</p></div>
                    </div>
-                   <div className="bg-purple-50 p-4 rounded border border-purple-100">
-                      <p className="text-sm text-purple-800">Tasa Aprobación</p>
-                      <p className="text-2xl font-bold text-purple-900">
-                         {filteredBatches.length ? Math.round((filteredBatches.filter(b => b.status === 'APPROVED').length / filteredBatches.length) * 100) : 0}%
-                      </p>
+                   <div className="p-4 rounded-xl bg-primary-50 border border-primary-100 flex items-center gap-4">
+                       <div className="p-3 bg-white rounded-lg shadow-sm"><Percent className="h-6 w-6 text-primary-500" /></div>
+                       <div>
+                            <p className="text-xs font-bold text-primary-400 uppercase">Tasa de Rechazo Global</p>
+                            <p className="text-2xl font-black text-primary-900">
+                                {(() => {
+                                    const analyzed = filteredFreq.reduce((s,r) => s + r.total_muestras_analizadas, 0);
+                                    const rejected = filteredFreq.reduce((s,r) => s + r.total_muestras_inadecuadas, 0);
+                                    return analyzed > 0 ? ((rejected / analyzed) * 100).toFixed(2) : "0";
+                                })()}%
+                            </p>
+                       </div>
                    </div>
                 </div>
-              </div>
-            )}
-            
-            {activeTab === 'DISTRIBUTION' && (
-                <div className="flex flex-col items-center justify-center py-12 text-gray-500">
-                    <p className="mb-2">Módulo de reporte detallado de distribución en desarrollo para Fase 2.</p>
-                    <p className="text-sm">Consulte el Dashboard principal para tendencias generales.</p>
-                </div>
-            )}
-          </>
+            </div>
         )}
       </div>
-
-      <style>{`
-        @media print {
-          .no-print { display: none !important; }
-          body { background: white; }
-          .shadow { box-shadow: none !important; }
-        }
-      `}</style>
     </div>
   );
 };

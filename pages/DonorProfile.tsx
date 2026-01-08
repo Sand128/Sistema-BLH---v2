@@ -5,12 +5,14 @@ import {
   ChevronLeft, Edit, Phone, Mail, MapPin, Calendar, 
   FileText, Activity, Plus, FlaskConical, ExternalLink, 
   QrCode, User, HeartPulse, Stethoscope, AlertCircle,
-  FileDown
+  FileDown, Info, Ban
 } from 'lucide-react';
 import { donorService } from '../services/donorService';
 import { batchService } from '../services/batchService';
 import { pdfService } from '../services/pdfService';
-import { Donor, Bottle } from '../types';
+import { authService } from '../services/authService';
+// Added MilkType import
+import { Donor, Bottle, MilkType } from '../types';
 import { HOSPITALS } from '../services/hospitalData';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -21,6 +23,8 @@ type TabType = 'GENERAL' | 'CLINICAL' | 'CONTACT' | 'HISTORY';
 export const DonorProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const currentUser = authService.getCurrentUser();
+  
   const [donor, setDonor] = useState<Donor | null>(null);
   const [bottles, setBottles] = useState<Bottle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,11 +34,18 @@ export const DonorProfile: React.FC = () => {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // New Bottle Form State
+  // Updated bottleForm state to include milkType
   const [isAddingBottle, setIsAddingBottle] = useState(false);
-  const [bottleForm, setBottleForm] = useState({
+  const [bottleForm, setBottleForm] = useState<{
+    volume: string;
+    date: string;
+    hospitalInitials: string;
+    milkType: MilkType | '';
+  }>({
     volume: '',
     date: new Date().toISOString().split('T')[0],
-    hospitalInitials: 'HMPMPS' // Default
+    hospitalInitials: 'HMPMPS', // Default
+    milkType: 'MADURA' // Default milk type
   });
   const [addingLoading, setAddingLoading] = useState(false);
 
@@ -61,16 +72,30 @@ export const DonorProfile: React.FC = () => {
   };
 
   const handleDownloadConsent = async () => {
-    if (!donor) return;
+    if (!donor || !currentUser) return;
     setDownloadingPdf(true);
     try {
       const fullName = `${donor.firstName} ${donor.lastName}`;
-      const pdfBytes = await pdfService.generateConsentPdf(fullName);
-      const filename = `Consentimiento_${donor.firstName.replace(/\s+/g, '_')}_${donor.lastName.replace(/\s+/g, '_')}.pdf`;
+      
+      const pdfBytes = await pdfService.generateOfficialConsent({
+        unidadMedica: donor.prenatalControlEntity || 'BANCO DE LECHE HUMANA',
+        fecha: new Date().toLocaleDateString('es-MX', { 
+            day: '2-digit', 
+            month: '2-digit', 
+            year: '2-digit' 
+        }),
+        nombreDonadora: fullName,
+        consentimientoSi: true,
+        personalSalud: pdfService.formatStaffName(currentUser.name)
+      });
+
+      const safeName = fullName.replace(/\s+/g, '_');
+      const filename = `Consentimiento_Informado_${safeName}.pdf`;
+      
       pdfService.downloadPdf(pdfBytes, filename);
     } catch (error) {
       console.error(error);
-      alert('Error al generar el PDF. Por favor verifique la plantilla.');
+      alert('Error al generar el PDF de consentimiento.');
     } finally {
       setDownloadingPdf(false);
     }
@@ -79,24 +104,30 @@ export const DonorProfile: React.FC = () => {
   const handleAddBottle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!donor) return;
+    if (!bottleForm.milkType) {
+      alert('Seleccione el tipo de leche');
+      return;
+    }
     setAddingLoading(true);
     try {
+        // Fixed: Added the missing 7th argument (milkType) to createBottle
         await batchService.createBottle(
             donor.id, 
             `${donor.firstName} ${donor.lastName}`,
             Number(bottleForm.volume),
             bottleForm.date,
             bottleForm.hospitalInitials,
-            donor.donationType
+            donor.donationType,
+            bottleForm.milkType as MilkType
         );
-        // Refresh bottles
         const updatedBottles = await batchService.getBottlesByDonorId(donor.id);
         setBottles(updatedBottles.sort((a,b) => new Date(b.collectionDate).getTime() - new Date(a.collectionDate).getTime()));
         setIsAddingBottle(false);
         setBottleForm({ 
             volume: '', 
             date: new Date().toISOString().split('T')[0],
-            hospitalInitials: 'HMPMPS'
+            hospitalInitials: 'HMPMPS',
+            milkType: 'MADURA'
         });
     } catch (error) {
         alert('Error al registrar frasco');
@@ -108,7 +139,6 @@ export const DonorProfile: React.FC = () => {
   if (loading) return <div className="p-12 text-center text-slate-500 font-medium animate-pulse">Cargando expediente digital...</div>;
   if (!donor) return <div className="p-12 text-center text-red-600 font-bold bg-red-50 rounded-lg mx-8 mt-8">Expediente de donadora no encontrado</div>;
 
-  // Componentes Visuales Auxiliares
   const StatusBadge = ({ status }: { status: string }) => {
      const styles: Record<string, string> = {
        ACTIVE: 'bg-emerald-100 text-emerald-800 border-emerald-200 ring-emerald-500/20',
@@ -204,6 +234,15 @@ export const DonorProfile: React.FC = () => {
             <div className="flex flex-wrap gap-3 w-full md:w-auto mt-4 md:mt-0">
                 <Button 
                     variant="outline" 
+                    onClick={() => navigate(`/donors/edit/${donor.id}`)}
+                    className="w-full md:w-auto border-pink-200 text-pink-700 hover:bg-pink-50"
+                >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Actualizar
+                </Button>
+                
+                <Button 
+                    variant="outline" 
                     onClick={handleDownloadConsent} 
                     isLoading={downloadingPdf}
                     className="w-full md:w-auto border-blue-200 text-blue-700 hover:bg-blue-50"
@@ -212,7 +251,7 @@ export const DonorProfile: React.FC = () => {
                     Consentimiento
                 </Button>
 
-                {donor.status === 'ACTIVE' && (
+                {donor.status === 'ACTIVE' ? (
                     <Button 
                         className="w-full md:w-auto bg-pink-600 hover:bg-pink-700 shadow-lg shadow-pink-200"
                         onClick={() => {
@@ -223,25 +262,43 @@ export const DonorProfile: React.FC = () => {
                         <Plus className="h-4 w-4 mr-2" />
                         Nueva Donación
                     </Button>
+                ) : (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg text-slate-500 text-xs font-bold border border-slate-200 italic">
+                        <Ban className="h-4 w-4" />
+                        Recolección Deshabilitada
+                    </div>
                 )}
             </div>
         </div>
         
-        {/* Rejection Alert */}
-        {donor.status === 'REJECTED' && (
-            <div className="mt-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                <div>
-                    <h4 className="text-sm font-bold text-red-800">Causa de Rechazo / No Aptitud</h4>
-                    <p className="text-sm text-red-700 mt-1">{donor.rejectionReason}</p>
+        {/* Alerts Section */}
+        <div className="mt-6 space-y-3">
+            {donor.status === 'REJECTED' && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                    <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <h4 className="text-sm font-bold text-red-800">Causa de Rechazo / No Aptitud</h4>
+                        <p className="text-sm text-red-700 mt-1">{donor.rejectionReason}</p>
+                    </div>
                 </div>
-            </div>
-        )}
+            )}
+            {donor.status !== 'ACTIVE' && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+                    <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                        <h4 className="text-sm font-bold text-amber-800">Restricción de Operación</h4>
+                        <p className="text-sm text-amber-700 mt-1">
+                            Debido al estatus actual de la donadora, el sistema ha restringido la recepción de nuevos frascos. 
+                            Actualice el estatus clínico a <strong>ACTIVA</strong> una vez completada la validación para habilitar las donaciones.
+                        </p>
+                    </div>
+                </div>
+            )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* Sidebar Navigation */}
           <div className="lg:col-span-3 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden sticky top-6">
               <div className="p-4 bg-slate-50 border-b border-slate-200">
                   <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Menú del Perfil</h2>
@@ -253,7 +310,6 @@ export const DonorProfile: React.FC = () => {
                   <TabButton id="HISTORY" label="Historial Donaciones" icon={FlaskConical} />
               </nav>
               
-              {/* Stats Mini Widget */}
               <div className="p-5 border-t border-slate-200 mt-2">
                   <p className="text-xs text-slate-500 font-medium mb-2 uppercase">Total Donado</p>
                   <div className="flex items-baseline gap-1">
@@ -265,10 +321,8 @@ export const DonorProfile: React.FC = () => {
               </div>
           </div>
 
-          {/* Main Content Area */}
           <div className="lg:col-span-9 space-y-6">
               
-              {/* TAB: GENERAL */}
               {activeTab === 'GENERAL' && (
                   <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:p-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
                       <SectionTitle title="Información Personal" />
@@ -303,7 +357,6 @@ export const DonorProfile: React.FC = () => {
                   </div>
               )}
 
-              {/* TAB: CLINICAL */}
               {activeTab === 'CLINICAL' && (
                   <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:p-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
                       <SectionTitle title="Antecedentes Perinatales" />
@@ -377,7 +430,6 @@ export const DonorProfile: React.FC = () => {
                   </div>
               )}
 
-              {/* TAB: CONTACT */}
               {activeTab === 'CONTACT' && (
                   <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 lg:p-8 animate-in fade-in slide-in-from-bottom-4 duration-300">
                       <SectionTitle title="Información de Contacto" />
@@ -420,7 +472,6 @@ export const DonorProfile: React.FC = () => {
                   </div>
               )}
 
-              {/* TAB: HISTORY (Bottles) */}
               {activeTab === 'HISTORY' && (
                   <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
                       
@@ -440,7 +491,6 @@ export const DonorProfile: React.FC = () => {
                           )}
                       </div>
 
-                      {/* Add Bottle Form Panel */}
                       {isAddingBottle && (
                           <div className="p-6 bg-pink-50/50 border-b border-pink-100 animate-in slide-in-from-top-2">
                               <h4 className="text-sm font-bold text-pink-800 uppercase mb-4">Nueva Etiqueta de Recolección</h4>
@@ -456,6 +506,21 @@ export const DonorProfile: React.FC = () => {
                                               {HOSPITALS.map(h => (
                                                   <option key={h.initials} value={h.initials}>{h.name} ({h.initials})</option>
                                               ))}
+                                          </select>
+                                      </div>
+                                      {/* Added Milk Type Selection */}
+                                      <div>
+                                          <label className="block text-xs font-bold text-slate-700 mb-1 uppercase">Tipo de Leche</label>
+                                          <select 
+                                            className="block w-full px-4 py-3 border border-[#C6C6C6] bg-white rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 text-sm text-[#333333]"
+                                            value={bottleForm.milkType}
+                                            onChange={(e) => setBottleForm({...bottleForm, milkType: e.target.value as MilkType})}
+                                            required
+                                          >
+                                              <option value="MADURA">Madura</option>
+                                              <option value="PRECALOSTRO">Precalostro</option>
+                                              <option value="CALOSTRO">Calostro</option>
+                                              <option value="TRANSICION">Transición</option>
                                           </select>
                                       </div>
                                       <Input 
@@ -489,7 +554,6 @@ export const DonorProfile: React.FC = () => {
                           </div>
                       )}
 
-                      {/* List */}
                       <div className="max-h-[600px] overflow-y-auto">
                           {bottles.length === 0 ? (
                               <div className="p-12 text-center flex flex-col items-center">

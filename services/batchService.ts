@@ -1,5 +1,5 @@
 
-import { Batch, Bottle, BatchStatus, QualityControlRecord, DiscardRecord, PhysicalInspectionRecord } from '../types';
+import { Batch, Bottle, BatchStatus, QualityControlRecord, DiscardRecord, PhysicalInspectionRecord, MilkType } from '../types';
 import { MOCK_BATCHES, MOCK_BOTTLES, MOCK_QC_RECORDS } from './mockData';
 
 const BATCH_STORAGE_KEY = 'blh_batches';
@@ -92,6 +92,11 @@ export const batchService = {
     return getStoredBatches().find(b => b.id === id);
   },
 
+  getAllBottles: async (): Promise<Bottle[]> => {
+    await new Promise(resolve => setTimeout(resolve, 300));
+    return getStoredBottles();
+  },
+
   getAvailableBottles: async (): Promise<Bottle[]> => {
     await new Promise(resolve => setTimeout(resolve, 300));
     return getStoredBottles().filter(b => b.status === 'COLLECTED');
@@ -129,6 +134,7 @@ export const batchService = {
       date: string, // YYYY-MM-DD
       hospitalInitials: string,
       donationType: 'HOMOLOGOUS' | 'HETEROLOGOUS' | 'MIXED' | 'REJECTED',
+      milkType: MilkType,
       details?: {
           collectionDateTime?: string,
           donorAge?: number,
@@ -160,6 +166,7 @@ export const batchService = {
       volume,
       hospitalInitials,
       status: 'COLLECTED',
+      milkType,
       
       // Extended fields
       collectionDateTime: details?.collectionDateTime || new Date().toISOString(),

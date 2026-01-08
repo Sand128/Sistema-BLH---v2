@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { Users, Activity, Clock, Heart, FlaskConical, ClipboardCheck, Baby, Archive, AlertTriangle, ArrowRight, ArrowUpRight } from 'lucide-react';
+import { Users, Activity, Clock, Heart, FlaskConical, ClipboardCheck, Baby, Archive, AlertTriangle, ArrowRight, ArrowUpRight, ClipboardList } from 'lucide-react';
 import { reportService } from '../services/reportService';
 import { donorService } from '../services/donorService';
 import { KPIMetrics, TrendPoint, DashboardStats, QualityStats } from '../types';
@@ -92,6 +92,10 @@ export const Dashboard: React.FC = () => {
           <p className="mt-1 text-sm text-gray-500">Visión general en tiempo real del Banco de Leche.</p>
         </div>
         <div className="flex gap-2">
+          <Link to="/daily-summary" className="inline-flex items-center px-4 py-2 border border-primary-600 shadow-sm text-sm font-bold rounded-md text-white bg-primary-600 hover:bg-primary-700">
+            <ClipboardList className="h-4 w-4 mr-2" />
+            Resumen Diario
+          </Link>
           <Link to="/reports" className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
             Ver Reportes Detallados
           </Link>

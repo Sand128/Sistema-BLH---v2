@@ -1,11 +1,25 @@
 
-export type UserRole = 'ADMIN' | 'HEALTH_STAFF';
+export type UserRole = 
+  | 'ADMIN' 
+  | 'SUPERVISOR' 
+  | 'CAPTURA' 
+  | 'RESPONSABLE_BLH' 
+  | 'CAPTACION_DONADORAS' 
+  | 'VERIFICACION_LOGISTICA' 
+  | 'ADMINISTRATIVO';
 
 export interface User {
   id: string;
   name: string;
+  username: string;
   email: string;
   role: UserRole;
+  sector: string;
+  coordination: string;
+  area: string;
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  registrationDate: string;
+  lastAccess?: string;
   avatarUrl?: string;
 }
 
@@ -21,7 +35,7 @@ export type DonorStatus = 'ACTIVE' | 'INACTIVE' | 'SCREENING' | 'SUSPENDED' | 'R
 export interface LabResult {
   performed: boolean;
   date?: string;
-  result?: string; // 'REACTIVO' | 'NO_REACTIVO'
+  result?: string;
 }
 
 export interface LabTestDetail {
@@ -49,7 +63,6 @@ export interface MedicationDetail {
 
 export interface Donor {
   id: string;
-  // Ficha de Identificación
   folio: string;
   fileNumber: string;
   registrationDate: string;
@@ -63,8 +76,6 @@ export interface Donor {
   addressReferences: string;
   phone: string;
   email: string;
-  
-  // Antecedentes Perinatales
   prenatalControlEntity: string;
   deliveryDate: string;
   infantAgeWeeks: number;
@@ -78,21 +89,13 @@ export interface Donor {
   pregnancyInfections: boolean;
   infectionTrimester?: string;
   pregnancyComplications?: string;
-
-  // Criterios de Exclusión Específicos (Validación)
-  toxicSubstances: boolean; // Alcohol, tabaco, drogas
-  chemicalExposure: boolean; // Exposición ambiental
-  recentVaccines: boolean; // Virus vivos ultimas 4 semanas
-  bloodTransfusionRisk: boolean; // Transfusión < 5 años
-
-  // Antecedentes Patológicos (Detailed)
+  toxicSubstances: boolean;
+  chemicalExposure: boolean;
+  recentVaccines: boolean;
+  bloodTransfusionRisk: boolean;
   pathologies: PathologyDetail[];
-  
-  // Tratamiento Farmacológico (Detailed)
   isTakingMedication: boolean;
   medicationsList: MedicationDetail[];
-
-  // Antecedentes Gineco-Obstétricos
   gestations: number;
   deliveries: number;
   cesareans: number;
@@ -100,74 +103,59 @@ export interface Donor {
   sexualPartners: number;
   contraceptiveMethod: string;
   anomalies?: string;
-
-  // Laboratorio (Detailed)
   labTests: LabTestDetail[];
   bloodType?: string;
-
-  // Resultado Entrevista
   status: DonorStatus;
   donationType: 'HOMOLOGOUS' | 'HETEROLOGOUS' | 'MIXED' | 'REJECTED';
   rejectionReason?: string;
-
-  // Motivo Donación
   donationReason: 'SURPLUS' | 'DEATH' | 'OTHER';
-  
-  // Tipo Donadora
   donorCategory: 'INTERNAL' | 'EXTERNAL' | 'HOME' | 'LACTARIUM';
-
-  // Responsables
   interviewerName: string;
   elaboratorName: string;
-  
   medicalNotes?: string;
+  obstetricEventType: 'PARTO' | 'CESAREA';
 }
 
 export type BatchStatus = 'IN_PROCESS' | 'COMPLETED' | 'PENDING_QC' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'PASTEURIZED';
 export type BatchType = 'HOMOLOGOUS' | 'HETEROLOGOUS';
+export type MilkType = 'PRECALOSTRO' | 'CALOSTRO' | 'TRANSICION' | 'MADURA';
 
 export interface Bottle {
   id: string;
-  traceabilityCode: string; // [Type][Day][Month][Year][Consec]-[Hospital]
+  traceabilityCode: string;
   donorId: string;
   donorName: string; 
-  collectionDate: string; // ISO Date String (YYYY-MM-DD)
+  collectionDate: string;
   volume: number; 
   hospitalInitials: string;
   status: 'COLLECTED' | 'ASSIGNED' | 'DISCARDED';
+  milkType: MilkType;
   batchId?: string;
-
-  // Extended Collection Data (Snapshot at collection time)
-  collectionDateTime?: string; // ISO DateTime
+  collectionDateTime?: string;
   donorAgeSnapshot?: number;
   obstetricEventType?: 'PARTO' | 'CESAREA';
   gestationalAgeSnapshot?: number;
   responsibleName?: string;
   observations?: string;
-  storageLocation?: string; // e.g. "Freezer 1"
+  storageLocation?: string;
 }
 
-// Nueva estructura para Inspección Física
 export interface PhysicalInspectionRecord {
   id: string;
   batchId: string;
   inspectorName: string;
   inspectionDate: string;
-  
-  // Estado del envase
   containerState: {
-    lid: boolean;      // Tapa correcta
-    integrity: boolean; // Sin roturas
-    seal: boolean;     // Sello intacto
-    label: boolean;    // Etiqueta legible
+    lid: boolean;
+    integrity: boolean;
+    seal: boolean;
+    label: boolean;
   };
-  
   milkState: 'FROZEN' | 'REFRIGERATED' | 'THAWED';
   volumeCheck: number;
   observations?: string;
-  
   verdict: 'APPROVED' | 'REJECTED';
-  rejectionReasons: string[]; // List of specific reasons if Rejected
+  rejectionReasons: string[];
 }
 
 export interface QualityControlRecord {
@@ -175,14 +163,12 @@ export interface QualityControlRecord {
   batchId: string;
   inspectorName: string;
   inspectionDate: string;
-  
   acidityDornic: number;
   crematocrit: number;
   flavor: 'NORMAL' | 'OFF_FLAVOR';
   color: string;
   packagingState: 'OK' | 'DAMAGED';
   coliformsPresence: boolean;
-  
   verdict: 'APPROVED' | 'REJECTED';
   notes?: string;
 }
@@ -199,7 +185,7 @@ export interface Batch {
   bottleCount: number;
   bottles: string[];
   qualityControlId?: string;
-  physicalInspectionId?: string; // Reference to new inspection
+  physicalInspectionId?: string;
 }
 
 export interface Recipient {
@@ -276,7 +262,7 @@ export interface ReportFilter {
   endDate: string;
 }
 
-export type NotificationModule = 'INVENTORY' | 'QUALITY' | 'DONORS' | 'ADMINISTRATION' | 'SYSTEM';
+export type NotificationModule = 'INVENTORY' | 'QUALITY' | 'DONORS' | 'ADMINISTRATION' | 'SYSTEM' | 'USERS';
 export type NotificationPriority = 'HIGH' | 'NORMAL' | 'LOW';
 
 export interface SystemNotification {

@@ -2,13 +2,14 @@
 import React, { useState, useEffect } from 'react';
 import { 
     ThermometerSnowflake, Search, User, Calendar, FlaskConical, 
-    Save, Building2, UserCircle2, Clock, Info, CheckCircle, List
+    Save, Building2, UserCircle2, Clock, Info, CheckCircle, List,
+    AlertTriangle, Ban, Droplets
 } from 'lucide-react';
 import { donorService } from '../services/donorService';
 import { batchService } from '../services/batchService';
 import { authService } from '../services/authService';
 import { HOSPITALS } from '../services/hospitalData';
-import { Donor, Bottle } from '../types';
+import { Donor, Bottle, MilkType } from '../types';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 
@@ -27,8 +28,9 @@ export const MilkCollection: React.FC = () => {
     
     // Form State
     const [form, setForm] = useState({
-        hospitalInitials: 'HMPMPS', // Default to main hospital
+        hospitalInitials: '', 
         volume: '',
+        milkType: '' as MilkType | '',
         date: new Date().toISOString().split('T')[0],
         time: new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false }),
         responsibleName: currentUser?.name || '',
@@ -44,7 +46,7 @@ export const MilkCollection: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        if (searchTerm.length > 2) {
+        if (searchTerm.length > 1) {
             const results = donors.filter(d => 
                 `${d.firstName} ${d.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 d.folio?.toLowerCase().includes(searchTerm.toLowerCase())
@@ -57,10 +59,9 @@ export const MilkCollection: React.FC = () => {
 
     const loadData = async () => {
         const dData = await donorService.getAll();
-        const bData = await batchService.getAvailableBottles(); // Only need bottles for today really, but this works
-        setDonors(dData.filter(d => d.status === 'ACTIVE'));
+        const bData = await batchService.getAvailableBottles();
+        setDonors(dData);
         
-        // Filter bottles collected today for the summary
         const today = new Date().toISOString().split('T')[0];
         setRecentBottles(bData.filter(b => b.collectionDate === today));
     };
@@ -69,7 +70,6 @@ export const MilkCollection: React.FC = () => {
         setSelectedDonor(donor);
         setSearchTerm('');
         setFilteredDonors([]);
-        // Auto-fill some derived data if possible
         setForm(prev => ({
             ...prev,
             obstetricEventType: donor.cesareans > 0 && donor.deliveries === 0 ? 'CESAREA' : 'PARTO'
@@ -87,15 +87,39 @@ export const MilkCollection: React.FC = () => {
         return age;
     };
 
+    const getStatusLabel = (status: string) => {
+        const labels: Record<string, string> = {
+            ACTIVE: 'Activa',
+            INACTIVE: 'Inactiva',
+            SCREENING: 'En Estudio',
+            REJECTED: 'No Apta',
+            SUSPENDED: 'Suspendida'
+        };
+        return labels[status] || status;
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedDonor) return;
 
+        if (selectedDonor.status !== 'ACTIVE') {
+            alert('Error de Seguridad: No se puede registrar leche de una donadora que no esté en estado ACTIVA.');
+            return;
+        }
+
+        if (form.milkType === '') {
+            alert('Debe seleccionar el Tipo de Leche recolectada.');
+            return;
+        }
+
+        if (form.hospitalInitials === '') {
+            alert('Debe seleccionar el Hospital o Unidad de origen del frasco.');
+            return;
+        }
+
         setLoading(true);
         try {
-            // Combine date and time for ISO string
             const dateTime = `${form.date}T${form.time}:00`;
-
             const volumeVal = Number(form.volume);
             if (volumeVal <= 0) {
                 alert('El volumen debe ser mayor a 0');
@@ -110,27 +134,25 @@ export const MilkCollection: React.FC = () => {
                 form.date,
                 form.hospitalInitials,
                 selectedDonor.donationType,
+                form.milkType as MilkType,
                 {
                     collectionDateTime: dateTime,
                     donorAge: calculateAge(selectedDonor.birthDate),
                     obstetricEventType: form.obstetricEventType,
-                    gestationalAge: selectedDonor.gestationalAgeWeeks, // Snapshot from donor record
+                    gestationalAge: selectedDonor.gestationalAgeWeeks,
                     responsibleName: form.responsibleName,
                     observations: form.observations
                 }
             );
 
-            // Refresh recent bottles list
             const updatedBottles = await batchService.getAvailableBottles();
             const today = new Date().toISOString().split('T')[0];
             setRecentBottles(updatedBottles.filter(b => b.collectionDate === today));
             
-            // Success Feedback
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 3000);
-
-            // Reset only volume and obs, keep donor selected for multi-bottle entry
-            setForm(prev => ({ ...prev, volume: '', observations: '' }));
+            
+            setForm(prev => ({ ...prev, volume: '', observations: '', milkType: '' }));
 
         } catch (error) {
             console.error(error);
@@ -139,6 +161,8 @@ export const MilkCollection: React.FC = () => {
             setLoading(false);
         }
     };
+
+    const isDonorRestricted = selectedDonor && selectedDonor.status !== 'ACTIVE';
 
     return (
         <div className="space-y-6">
@@ -151,7 +175,6 @@ export const MilkCollection: React.FC = () => {
                     <p className="mt-2 text-base text-slate-600">Entrada de leche al banco (Externa o Lactario).</p>
                 </div>
                 
-                {/* Mode Switcher */}
                 <div className="bg-slate-100 p-1 rounded-lg flex items-center">
                     <button 
                         onClick={() => setMode('EXTERNAL')}
@@ -174,10 +197,9 @@ export const MilkCollection: React.FC = () => {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 
-                {/* Left Column: Form */}
                 <div className="lg:col-span-2 space-y-6">
                     
-                    {/* Donor Selection */}
+                    {/* 1. Identificar Donadora */}
                     <div className="bg-white shadow-sm rounded-xl border border-slate-200 p-6 relative">
                         <h3 className="text-sm font-bold text-slate-500 uppercase mb-4 flex items-center gap-2">
                             <UserCircle2 className="h-4 w-4" /> 1. Identificar Donadora
@@ -197,28 +219,41 @@ export const MilkCollection: React.FC = () => {
                                     autoFocus
                                 />
                                 {filteredDonors.length > 0 && (
-                                    <div className="absolute z-10 w-full bg-white mt-1 border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                    <div className="absolute z-50 w-full bg-white mt-1 border border-slate-200 rounded-md shadow-xl max-h-80 overflow-y-auto">
                                         {filteredDonors.map(donor => (
                                             <div 
                                                 key={donor.id}
-                                                className="p-3 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                                className="p-4 hover:bg-blue-50 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center"
                                                 onClick={() => handleSelectDonor(donor)}
                                             >
-                                                <p className="font-bold text-slate-800">{donor.firstName} {donor.lastName}</p>
-                                                <p className="text-xs text-slate-500">Folio: {donor.folio} • {calculateAge(donor.birthDate)} años</p>
+                                                <div>
+                                                    <p className="font-bold text-slate-800">{donor.firstName} {donor.lastName}</p>
+                                                    <p className="text-xs text-slate-500">Folio: {donor.folio} • {calculateAge(donor.birthDate)} años</p>
+                                                </div>
+                                                <span className={`text-[10px] font-black uppercase px-2 py-1 rounded border ${
+                                                    donor.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                                                    donor.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-100' :
+                                                    'bg-amber-50 text-amber-700 border-amber-100'
+                                                }`}>
+                                                    {getStatusLabel(donor.status)}
+                                                </span>
                                             </div>
                                         ))}
                                     </div>
                                 )}
                             </div>
                         ) : (
-                            <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex justify-between items-center">
+                            <div className={`rounded-lg p-4 flex justify-between items-center border ${
+                                isDonorRestricted ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-100'
+                            }`}>
                                 <div>
                                     <p className="text-lg font-bold text-slate-900">{selectedDonor.firstName} {selectedDonor.lastName}</p>
-                                    <div className="text-sm text-slate-600 flex gap-4 mt-1">
-                                        <span>Edad: <strong>{calculateAge(selectedDonor.birthDate)} años</strong></span>
-                                        <span>Edad Gestacional: <strong>{selectedDonor.gestationalAgeWeeks} sem</strong></span>
+                                    <div className="text-sm text-slate-600 flex flex-wrap gap-4 mt-1">
                                         <span>Folio: <strong>{selectedDonor.folio}</strong></span>
+                                        <span className={`font-black uppercase flex items-center gap-1 ${isDonorRestricted ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                            Estatus: {getStatusLabel(selectedDonor.status)}
+                                            {isDonorRestricted && <AlertTriangle className="h-3 w-3" />}
+                                        </span>
                                     </div>
                                 </div>
                                 <Button variant="outline" onClick={() => setSelectedDonor(null)} className="text-xs h-8">
@@ -228,8 +263,35 @@ export const MilkCollection: React.FC = () => {
                         )}
                     </div>
 
+                    {/* Alerta de Restricción */}
+                    {isDonorRestricted && (
+                        <div className="bg-red-50 border-2 border-red-200 p-6 rounded-xl animate-in fade-in zoom-in duration-300">
+                            <div className="flex items-start gap-4">
+                                <div className="p-3 bg-red-100 rounded-full text-red-600">
+                                    <Ban className="h-6 w-6" />
+                                </div>
+                                <div className="flex-1">
+                                    <h4 className="text-lg font-black text-red-800 uppercase tracking-tight">Donadora No Apta para Recolección</h4>
+                                    <p className="text-red-700 mt-1 leading-relaxed">
+                                        El sistema no permite el ingreso de leche de donadoras con estatus <strong>{getStatusLabel(selectedDonor.status)}</strong>. 
+                                        Para habilitar el registro, verifique los exámenes pendientes en el expediente clínico y actualice el estatus a <strong>ACTIVA</strong>.
+                                    </p>
+                                    <div className="mt-4">
+                                        <Button 
+                                            variant="outline" 
+                                            className="border-red-200 text-red-800 hover:bg-red-100 text-xs py-2"
+                                            onClick={() => window.open(`#/donors/${selectedDonor.id}`, '_blank')}
+                                        >
+                                            Ver expediente clínico
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Registration Form */}
-                    <div className={`bg-white shadow-md rounded-xl border border-slate-200 overflow-hidden transition-opacity ${!selectedDonor ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                    <div className={`bg-white shadow-md rounded-xl border border-slate-200 overflow-hidden transition-all duration-500 ${(!selectedDonor || isDonorRestricted) ? 'opacity-30 pointer-events-none grayscale' : 'opacity-100'}`}>
                         <div className="p-6 border-b border-slate-200 bg-slate-50">
                             <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                                 <FlaskConical className="h-5 w-5 text-blue-600" />
@@ -238,26 +300,46 @@ export const MilkCollection: React.FC = () => {
                         </div>
                         
                         <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                            
-                            {/* Hospital Selection (Important for Lactarium) */}
-                            <div className={mode === 'LACTARIUM' ? 'bg-blue-50/50 p-4 rounded-lg border border-blue-100' : ''}>
-                                <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">
-                                    <Building2 className="inline-block h-4 w-4 mr-1 mb-0.5" />
-                                    Centro de Recolección / Hospital
-                                </label>
-                                <select 
-                                    className="block w-full px-4 py-3 border border-slate-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                                    value={form.hospitalInitials}
-                                    onChange={e => setForm({...form, hospitalInitials: e.target.value})}
-                                >
-                                    {HOSPITALS.map(h => (
-                                        <option key={h.initials} value={h.initials}>{h.name} ({h.initials})</option>
-                                    ))}
-                                </select>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className={mode === 'LACTARIUM' ? 'bg-blue-50/30 p-3 rounded-lg border border-blue-100' : ''}>
+                                    <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">
+                                        <Building2 className="inline-block h-4 w-4 mr-1 mb-0.5" />
+                                        Unidad Médica (Origen) <span className="text-red-600">*</span>
+                                    </label>
+                                    <select 
+                                        className={`block w-full px-4 py-3 border rounded-md focus:ring-blue-500 focus:border-blue-500 ${form.hospitalInitials === '' ? 'border-amber-300' : 'border-slate-300'}`}
+                                        value={form.hospitalInitials}
+                                        onChange={e => setForm({...form, hospitalInitials: e.target.value})}
+                                        required
+                                    >
+                                        <option value="">Seleccione una unidad médica...</option>
+                                        {HOSPITALS.map(h => (
+                                            <option key={h.initials} value={h.initials}>{h.name} ({h.initials})</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="bg-pink-50/30 p-3 rounded-lg border border-pink-100">
+                                    <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">
+                                        <Droplets className="inline-block h-4 w-4 mr-1 mb-0.5 text-pink-600" />
+                                        Tipo de Leche <span className="text-red-600">*</span>
+                                    </label>
+                                    <select 
+                                        className={`block w-full px-4 py-3 border rounded-md focus:ring-pink-500 focus:border-pink-500 font-bold ${form.milkType === '' ? 'border-amber-300' : 'border-slate-300'}`}
+                                        value={form.milkType}
+                                        onChange={e => setForm({...form, milkType: e.target.value as MilkType})}
+                                        required
+                                    >
+                                        <option value="">-- Seleccione tipo --</option>
+                                        <option value="PRECALOSTRO">Precalostro</option>
+                                        <option value="CALOSTRO">Calostro</option>
+                                        <option value="TRANSICION">Transición</option>
+                                        <option value="MADURA">Madura</option>
+                                    </select>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {/* Auto-filled / Editable Clinical Data */}
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2 uppercase">Tipo de Evento Obstétrico</label>
                                     <select 
@@ -270,7 +352,6 @@ export const MilkCollection: React.FC = () => {
                                     </select>
                                 </div>
                                 
-                                {/* Volume */}
                                 <div>
                                     <Input
                                         label="Volumen Extraído (ml)"
@@ -284,7 +365,6 @@ export const MilkCollection: React.FC = () => {
                                     />
                                 </div>
 
-                                {/* Date & Time */}
                                 <div>
                                     <label className="block text-sm font-bold text-slate-700 mb-2 uppercase">Fecha Extracción</label>
                                     <div className="relative">
@@ -336,11 +416,12 @@ export const MilkCollection: React.FC = () => {
                             <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                                 <div className="text-sm text-slate-500 italic flex items-center">
                                     <Info className="h-4 w-4 mr-1" />
-                                    Se generará lote único automáticamente.
+                                    Se generará un código de trazabilidad único.
                                 </div>
                                 <Button 
                                     type="submit" 
                                     isLoading={loading} 
+                                    disabled={isDonorRestricted}
                                     className="w-48 bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200"
                                 >
                                     <Save className="h-5 w-5 mr-2" />
@@ -381,6 +462,7 @@ export const MilkCollection: React.FC = () => {
                                             <span className="text-xs font-bold text-slate-900">{bottle.volume} ml</span>
                                         </div>
                                         <p className="text-sm font-medium text-slate-800 truncate">{bottle.donorName}</p>
+                                        <p className="text-[10px] font-black text-pink-600 uppercase mt-1">{bottle.milkType}</p>
                                         <div className="flex justify-between items-end mt-2">
                                             <span className="text-[10px] text-slate-500 uppercase">{bottle.hospitalInitials}</span>
                                             <span className="text-[10px] text-slate-400">

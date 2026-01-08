@@ -1,3 +1,4 @@
+
 import { User, AuthState } from '../types';
 
 // Simple mock auth service using localStorage
@@ -11,11 +12,17 @@ export const authService = {
     // Hardcoded mock credentials for demo
     if (email === 'admin@blh.com' && password === 'admin') {
       const user: User = {
-        id: 'u1',
+        id: '1001',
         name: 'Dra. Elena Torres',
+        username: 'etorres',
         email,
         role: 'ADMIN',
-        avatarUrl: 'https://picsum.photos/100/100'
+        sector: 'ISEM',
+        coordination: 'HMPMPS',
+        area: 'Coordinación General',
+        status: 'ACTIVE',
+        registrationDate: '2023-01-01',
+        avatarUrl: 'https://i.pravatar.cc/150?u=1001'
       };
       localStorage.setItem(AUTH_KEY, JSON.stringify(user));
       return user;
@@ -23,12 +30,31 @@ export const authService = {
 
     if (email === 'staff@blh.com' && password === 'staff') {
       const user: User = {
-        id: 'u2',
+        id: '1002',
         name: 'Enf. Carla Ruiz',
+        username: 'cruiz',
         email,
-        role: 'HEALTH_STAFF',
-        avatarUrl: 'https://picsum.photos/100/100'
+        role: 'RESPONSABLE_BLH',
+        sector: 'ISEM',
+        coordination: 'HMPMPS',
+        area: 'Captación',
+        status: 'ACTIVE',
+        registrationDate: '2023-06-15',
+        avatarUrl: 'https://i.pravatar.cc/150?u=1002'
       };
+      
+      const storedUsers = localStorage.getItem('blh_system_users');
+      if (storedUsers) {
+          const users: User[] = JSON.parse(storedUsers);
+          const dbUser = users.find(u => u.email === email);
+          if (dbUser && dbUser.status === 'SUSPENDED') {
+              throw new Error('Su cuenta ha sido SUSPENDIDA. Contacte al administrador.');
+          }
+          if (dbUser && dbUser.status === 'INACTIVE') {
+              throw new Error('Su cuenta está INACTIVA.');
+          }
+      }
+
       localStorage.setItem(AUTH_KEY, JSON.stringify(user));
       return user;
     }
@@ -43,6 +69,10 @@ export const authService = {
   getCurrentUser: (): User | null => {
     const stored = localStorage.getItem(AUTH_KEY);
     return stored ? JSON.parse(stored) : null;
+  },
+
+  updateCurrentUser: (user: User) => {
+    localStorage.setItem(AUTH_KEY, JSON.stringify(user));
   },
 
   isAuthenticated: (): boolean => {
