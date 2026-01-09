@@ -165,6 +165,7 @@ export interface QualityControlRecord {
   inspectionDate: string;
   acidityDornic: number;
   crematocrit: number;
+  caloricClassification: 'HIPOCALÓRICA' | 'NORMOCALÓRICA' | 'HIPERCALÓRICA';
   flavor: 'NORMAL' | 'OFF_FLAVOR';
   color: string;
   packagingState: 'OK' | 'DAMAGED';

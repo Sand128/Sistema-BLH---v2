@@ -393,6 +393,8 @@ export const MOCK_QC_RECORDS: QualityControlRecord[] = [
     inspectionDate: '2023-11-16',
     acidityDornic: 4,
     crematocrit: 700,
+    // Fix: Add missing required property 'caloricClassification'
+    caloricClassification: 'NORMOCALÓRICA',
     flavor: 'NORMAL',
     color: 'Blanco amarillento',
     packagingState: 'OK',
@@ -407,6 +409,8 @@ export const MOCK_QC_RECORDS: QualityControlRecord[] = [
     inspectionDate: '2023-10-08',
     acidityDornic: 3,
     crematocrit: 680,
+    // Fix: Add missing required property 'caloricClassification'
+    caloricClassification: 'NORMOCALÓRICA',
     flavor: 'NORMAL',
     color: 'Blanco',
     packagingState: 'OK',
@@ -420,6 +424,8 @@ export const MOCK_QC_RECORDS: QualityControlRecord[] = [
     inspectionDate: '2023-09-18',
     acidityDornic: 9, // Rejected
     crematocrit: 600,
+    // Fix: Add missing required property 'caloricClassification'
+    caloricClassification: 'NORMOCALÓRICA',
     flavor: 'OFF_FLAVOR',
     color: 'Amarillo intenso',
     packagingState: 'OK',

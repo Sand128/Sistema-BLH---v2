@@ -187,7 +187,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <header className="h-24 shadow-sm flex items-center justify-between px-6 lg:px-8 bg-white border-b border-gray-100">
           <div className="flex items-center gap-4">
             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden text-gray-500"><Menu className="h-6 w-6" /></button>
-            <img src="/components/image/logos_edomex.png" alt="Edomex" className="h-12 sm:h-16 object-contain" />
+            <img src="logos_edomex.png" alt="Edomex" className="h-12 sm:h-16 object-contain" />
           </div>
 
           <div className="flex items-center gap-6">
