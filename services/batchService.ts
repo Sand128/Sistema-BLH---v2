@@ -1,5 +1,5 @@
 
-import { Batch, Bottle, BatchStatus, QualityControlRecord, DiscardRecord, PhysicalInspectionRecord, MilkType } from '../types';
+import { Batch, Bottle, BatchStatus, QualityControlRecord, DiscardRecord, PhysicalInspectionRecord, MilkType, BatchType } from '../types';
 import { MOCK_BATCHES, MOCK_BOTTLES, MOCK_QC_RECORDS } from './mockData';
 
 const BATCH_STORAGE_KEY = 'blh_batches';
@@ -13,9 +13,6 @@ if (!localStorage.getItem(BATCH_STORAGE_KEY)) {
 }
 if (!localStorage.getItem(BOTTLE_STORAGE_KEY)) {
   localStorage.setItem(BOTTLE_STORAGE_KEY, JSON.stringify(MOCK_BOTTLES));
-}
-if (!localStorage.getItem(QC_STORAGE_KEY)) {
-  localStorage.setItem(QC_STORAGE_KEY, JSON.stringify(MOCK_QC_RECORDS));
 }
 
 const getStoredBatches = (): Batch[] => {
@@ -54,208 +51,126 @@ const savePhysicalQC = (records: PhysicalInspectionRecord[]) => {
     localStorage.setItem(PHYSICAL_QC_STORAGE_KEY, JSON.stringify(records));
 };
 
-// --- TRACEABILITY LOGIC ---
-const generateTraceabilityCode = (
-    type: 'HOMOLOGOUS' | 'HETEROLOGOUS', 
-    date: Date, 
-    hospitalInitials: string,
-    dailyCount: number
-): string => {
-    // Component 1: Type
-    const typeCode = type === 'HOMOLOGOUS' ? 'HO' : 'HE';
-    
-    // Component 2: Day (01-31)
-    const day = date.getDate().toString().padStart(2, '0');
-    
-    // Component 3: Month Code (A-L)
-    const months = "ABCDEFGHIJKL";
-    const monthCode = months[date.getMonth()];
-    
-    // Component 4: Year (2 digits)
-    const year = date.getFullYear().toString().substr(-2);
-    
-    // Component 5: Consecutive (3 digits)
-    const consec = dailyCount.toString().padStart(3, '0');
-    
-    // Format: [Type][Day][Month][Year][Consec]-[Hospital]
-    return `${typeCode}${day}${monthCode}${year}${consec}-${hospitalInitials}`;
-};
-
 export const batchService = {
   getAll: async (): Promise<Batch[]> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 300));
     return getStoredBatches();
   },
 
   getById: async (id: string): Promise<Batch | undefined> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
     return getStoredBatches().find(b => b.id === id);
   },
 
+  getBottleById: async (id: string): Promise<Bottle | undefined> => {
+    return getStoredBottles().find(b => b.id === id);
+  },
+
   getAllBottles: async (): Promise<Bottle[]> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
     return getStoredBottles();
   },
 
   getAvailableBottles: async (): Promise<Bottle[]> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
     return getStoredBottles().filter(b => b.status === 'COLLECTED');
   },
 
   getBottlesByBatchId: async (batchId: string): Promise<Bottle[]> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const batch = getStoredBatches().find(b => b.id === batchId);
-    if (!batch) return [];
     const allBottles = getStoredBottles();
-    return allBottles.filter(b => batch.bottles.includes(b.id));
+    return allBottles.filter(b => b.batchId === batchId);
   },
   
   getBottlesByDonorId: async (donorId: string): Promise<Bottle[]> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
     return getStoredBottles().filter(b => b.donorId === donorId);
   },
 
-  getQCRecord: async (batchId: string): Promise<QualityControlRecord | undefined> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const allQC = getStoredQC();
-    return allQC.find(qc => qc.batchId === batchId);
+  getQCRecordByBottleId: async (bottleId: string): Promise<QualityControlRecord | undefined> => {
+    return getStoredQC().find(qc => qc.bottleId === bottleId);
   },
 
+  getPhysicalQCRecordByBottleId: async (bottleId: string): Promise<PhysicalInspectionRecord | undefined> => {
+    return getStoredPhysicalQC().find(qc => qc.bottleId === bottleId);
+  },
+
+  // Added for compatibility with reportService (Batch level lookup)
+  getQCRecord: async (batchId: string): Promise<QualityControlRecord | undefined> => {
+    return getStoredQC().find(qc => qc.batchId === batchId);
+  },
+
+  // Added for compatibility with reportService (Batch level lookup)
   getPhysicalQCRecord: async (batchId: string): Promise<PhysicalInspectionRecord | undefined> => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    const allQC = getStoredPhysicalQC();
-    return allQC.find(qc => qc.batchId === batchId);
+    return getStoredPhysicalQC().find(qc => qc.batchId === batchId);
   },
 
   createBottle: async (
       donorId: string, 
       donorName: string, 
       volume: number, 
-      date: string, // YYYY-MM-DD
+      date: string,
       hospitalInitials: string,
-      donationType: 'HOMOLOGOUS' | 'HETEROLOGOUS' | 'MIXED' | 'REJECTED',
+      donationType: string,
       milkType: MilkType,
-      details?: {
-          collectionDateTime?: string,
-          donorAge?: number,
-          obstetricEventType?: 'PARTO' | 'CESAREA',
-          gestationalAge?: number,
-          responsibleName?: string,
-          observations?: string
-      }
+      details?: any
   ): Promise<Bottle> => {
-    await new Promise(resolve => setTimeout(resolve, 600));
     const bottles = getStoredBottles();
-    
-    // Calculate daily consecutive
-    const collectionDate = new Date(date);
-    const dateString = collectionDate.toISOString().split('T')[0];
-    const dailyCount = bottles.filter(b => b.collectionDate === dateString).length + 1;
-
-    // Determine type for label (default to HE if mixed/rejected for safety, or use Donor type)
-    const typeCode = (donationType === 'HOMOLOGOUS') ? 'HOMOLOGOUS' : 'HETEROLOGOUS';
-
-    const code = generateTraceabilityCode(typeCode, collectionDate, hospitalInitials, dailyCount);
-
     const newBottle: Bottle = {
       id: Math.random().toString(36).substr(2, 9),
-      traceabilityCode: code,
-      donorId,
-      donorName,
-      collectionDate: date,
-      volume,
-      hospitalInitials,
-      status: 'COLLECTED',
-      milkType,
-      
-      // Extended fields
-      collectionDateTime: details?.collectionDateTime || new Date().toISOString(),
-      donorAgeSnapshot: details?.donorAge,
-      obstetricEventType: details?.obstetricEventType,
-      gestationalAgeSnapshot: details?.gestationalAge,
-      responsibleName: details?.responsibleName,
-      observations: details?.observations
+      traceabilityCode: `HE${Date.now().toString().slice(-6)}`,
+      donorId, donorName, collectionDate: date, volume, hospitalInitials,
+      status: 'COLLECTED', milkType, ...details
     };
-    
     saveBottles([newBottle, ...bottles]);
     return newBottle;
   },
 
-  create: async (data: Pick<Batch, 'type'> & { selectedBottleIds: string[] }): Promise<Batch> => {
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
+  create: async (data: { 
+    type: BatchType, 
+    selectedBottleIds: string[],
+    justificationForExtraDonors?: string,
+    authorizerName?: string
+  }): Promise<Batch> => {
     const batches = getStoredBatches();
     const bottles = getStoredBottles();
-    
-    // Validate bottles exist
     const selectedBottles = bottles.filter(b => data.selectedBottleIds.includes(b.id));
     
-    // BUSINES RULE: Homologous batches must come from a SINGLE donor
-    if (data.type === 'HOMOLOGOUS') {
-        const uniqueDonors = new Set(selectedBottles.map(b => b.donorId));
-        if (uniqueDonors.size > 1) {
-            throw new Error('Validación fallida: Un lote HOMÓLOGO solo puede contener leche de una única donadora.');
-        }
-    }
-
-    // Generate Batch Number: LOTE-YYYYMM-NNN
-    const date = new Date();
-    const yearMonth = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}`;
-    const monthlyCount = batches.filter(b => b.batchNumber.includes(yearMonth)).length + 1;
-    const batchNumber = `LOTE-${yearMonth}-${monthlyCount.toString().padStart(3, '0')}`;
-
-    // Calculate volume
-    const totalVolume = selectedBottles.reduce((sum, b) => sum + b.volume, 0);
-
-    // Expiration Date: 6 months from creation
-    const expirationDate = new Date(date);
-    expirationDate.setMonth(expirationDate.getMonth() + 6);
-
     const newBatch: Batch = {
       id: Math.random().toString(36).substr(2, 9),
-      batchNumber,
-      creationDate: date.toISOString().split('T')[0],
-      expirationDate: expirationDate.toISOString().split('T')[0],
-      type: data.type,
+      batchNumber: `LOTE-${Date.now().toString().slice(-6)}`,
+      creationDate: new Date().toISOString().split('T')[0],
+      expirationDate: '', 
       status: 'IN_PROCESS',
-      totalVolume,
-      currentVolume: totalVolume, // Initially full
-      bottleCount: selectedBottles.length,
-      bottles: data.selectedBottleIds
+      totalVolume: selectedBottles.reduce((sum, b) => sum + b.volume, 0),
+      currentVolume: selectedBottles.reduce((sum, b) => sum + b.volume, 0),
+      bottleCount: selectedBottles.length, 
+      bottles: data.selectedBottleIds,
+      type: data.type,
+      justificationForExtraDonors: data.justificationForExtraDonors,
+      authorizerName: data.authorizerName
     };
 
-    // Update Bottles status
     const updatedBottles = bottles.map(b => {
-      if (data.selectedBottleIds.includes(b.id)) {
-        return { ...b, status: 'ASSIGNED', batchId: newBatch.id };
-      }
+      if (data.selectedBottleIds.includes(b.id)) return { ...b, status: 'ASSIGNED', batchId: newBatch.id };
       return b;
     });
 
     saveBatches([newBatch, ...batches]);
     saveBottles(updatedBottles as Bottle[]);
-
     return newBatch;
   },
 
   updateStatus: async (id: string, status: BatchStatus): Promise<Batch> => {
-    await new Promise(resolve => setTimeout(resolve, 500));
     const batches = getStoredBatches();
     const index = batches.findIndex(b => b.id === id);
     if (index === -1) throw new Error('Batch not found');
-
-    const updatedBatch = { ...batches[index], status };
-    batches[index] = updatedBatch;
+    const updated = { ...batches[index], status };
+    batches[index] = updated;
     saveBatches(batches);
-    return updatedBatch;
+    return updated;
   },
 
-  // NEW: Save Physical Inspection
-  addPhysicalInspection: async (data: Omit<PhysicalInspectionRecord, 'id' | 'inspectionDate'>): Promise<Batch> => {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      const batches = getStoredBatches();
-      const batchIndex = batches.findIndex(b => b.id === data.batchId);
-      if (batchIndex === -1) throw new Error('Batch not found');
+  // ANÁLISIS POR FRASCO
+  addBottlePhysicalInspection: async (data: Omit<PhysicalInspectionRecord, 'id' | 'inspectionDate'>): Promise<Bottle> => {
+      const bottles = getStoredBottles();
+      const bottleIndex = bottles.findIndex(b => b.id === data.bottleId);
+      if (bottleIndex === -1) throw new Error('Bottle not found');
 
       const newRecord: PhysicalInspectionRecord = {
           ...data,
@@ -266,38 +181,24 @@ export const batchService = {
       const allPhysical = getStoredPhysicalQC();
       savePhysicalQC([...allPhysical, newRecord]);
 
-      // Update Batch Status Logic
-      // If Approved -> PENDING_QC (Ready for chemical)
-      // If Rejected -> REJECTED
-      let newStatus: BatchStatus = 'PENDING_QC'; 
-      if (newRecord.verdict === 'REJECTED') {
-          newStatus = 'REJECTED';
-      }
-
-      const updatedBatch = {
-          ...batches[batchIndex],
-          status: newStatus,
-          physicalInspectionId: newRecord.id
+      const updatedBottle: Bottle = {
+          ...bottles[bottleIndex],
+          physicalInspectionId: newRecord.id,
+          status: newRecord.verdict === 'REJECTED' ? 'REJECTED' : bottles[bottleIndex].status
       };
       
-      batches[batchIndex] = updatedBatch;
-      saveBatches(batches);
-
-      return updatedBatch;
+      bottles[bottleIndex] = updatedBottle;
+      saveBottles(bottles);
+      await batchService.recalculateBatchStatus(data.batchId);
+      return updatedBottle;
   },
 
-  addQualityControl: async (qcData: Omit<QualityControlRecord, 'id' | 'verdict' | 'inspectionDate'>): Promise<Batch> => {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const batches = getStoredBatches();
-    const batchIndex = batches.findIndex(b => b.id === qcData.batchId);
-    if (batchIndex === -1) throw new Error('Batch not found');
+  addBottleQualityControl: async (qcData: Omit<QualityControlRecord, 'id' | 'verdict' | 'inspectionDate'>): Promise<Bottle> => {
+    const bottles = getStoredBottles();
+    const bottleIndex = bottles.findIndex(b => b.id === qcData.bottleId);
+    if (bottleIndex === -1) throw new Error('Bottle not found');
 
-    // Automatic Approval Logic
-    let verdict: 'APPROVED' | 'REJECTED' = 'APPROVED';
-    if (qcData.acidityDornic > 8 || qcData.coliformsPresence) {
-      verdict = 'REJECTED';
-    }
+    let verdict: 'APPROVED' | 'REJECTED' = (qcData.acidityDornic > 8 || qcData.coliformsPresence) ? 'REJECTED' : 'APPROVED';
 
     const newQCRecord: QualityControlRecord = {
       ...qcData,
@@ -309,35 +210,57 @@ export const batchService = {
     const allQC = getStoredQC();
     saveQC([...allQC, newQCRecord]);
 
-    const updatedBatch = { 
-      ...batches[batchIndex], 
-      status: verdict as BatchStatus,
-      qualityControlId: newQCRecord.id
+    const updatedBottle: Bottle = { 
+      ...bottles[bottleIndex], 
+      qualityControlId: newQCRecord.id,
+      status: verdict
     };
-    batches[batchIndex] = updatedBatch;
-    saveBatches(batches);
+    
+    bottles[bottleIndex] = updatedBottle;
+    saveBottles(bottles);
+    await batchService.recalculateBatchStatus(qcData.batchId);
+    return updatedBottle;
+  },
 
-    return updatedBatch;
+  recalculateBatchStatus: async (batchId: string): Promise<void> => {
+      const batches = getStoredBatches();
+      const batchIndex = batches.findIndex(b => b.id === batchId);
+      if (batchIndex === -1) return;
+
+      const batchBottles = getStoredBottles().filter(b => b.batchId === batchId);
+      
+      const anyRejected = batchBottles.some(b => b.status === 'REJECTED');
+      const allAnalyzed = batchBottles.every(b => b.physicalInspectionId && b.qualityControlId);
+      const allApproved = batchBottles.every(b => b.status === 'APPROVED');
+
+      let newStatus: BatchStatus = batches[batchIndex].status;
+
+      if (anyRejected) {
+          // Si hay algún frasco no apto, el lote se bloquea (se puede marcar como rejected o dejar en pending)
+          // Según el requerimiento: bloquear avance.
+          newStatus = 'REJECTED'; 
+      } else if (allAnalyzed && allApproved) {
+          newStatus = 'APPROVED';
+      } else if (batchBottles.some(b => b.physicalInspectionId)) {
+          newStatus = 'PENDING_QC';
+      }
+
+      batches[batchIndex].status = newStatus;
+      saveBatches(batches);
   },
 
   reduceVolume: async (batchId: string, amount: number): Promise<Batch> => {
     const batches = getStoredBatches();
     const index = batches.findIndex(b => b.id === batchId);
-    if (index === -1) throw new Error('Batch not found');
-    
     const batch = batches[index];
-    if (batch.currentVolume < amount) {
-        throw new Error('Insufficient volume in batch');
-    }
-
-    const updatedBatch = { ...batch, currentVolume: batch.currentVolume - amount };
-    batches[index] = updatedBatch;
+    if (batch.currentVolume < amount) throw new Error('Insufficient volume');
+    const updated = { ...batch, currentVolume: batch.currentVolume - amount };
+    batches[index] = updated;
     saveBatches(batches);
-    return updatedBatch;
+    return updated;
   },
 
   discardVolume: async (data: Omit<DiscardRecord, 'id' | 'date'>): Promise<void> => {
      await batchService.reduceVolume(data.batchId, data.volumeDiscarded);
-     console.log('Discard recorded:', data);
   }
 };

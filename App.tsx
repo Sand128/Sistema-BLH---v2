@@ -13,6 +13,7 @@ import { BatchDetail } from './pages/BatchDetail';
 import { QualityControlList } from './pages/QualityControlList';
 import { QualityControlForm } from './pages/QualityControlForm';
 import { PhysicalInspectionForm } from './pages/PhysicalInspectionForm';
+import { BatchAnalysisDetail } from './pages/BatchAnalysisDetail'; // Nueva página
 import { RecipientList } from './pages/RecipientList';
 import { RecipientForm } from './pages/RecipientForm';
 import { RecipientDetail } from './pages/RecipientDetail';
@@ -58,10 +59,11 @@ const App: React.FC = () => {
         <Route path="/batches/new" element={<ProtectedRoute><BatchForm /></ProtectedRoute>} />
         <Route path="/batches/:id" element={<ProtectedRoute><BatchDetail /></ProtectedRoute>} />
 
-        {/* Quality Control Routes */}
+        {/* Quality Control Routes - Rediseñadas para frascos individuales */}
         <Route path="/quality-control" element={<ProtectedRoute><QualityControlList /></ProtectedRoute>} />
-        <Route path="/quality-control/physical/:batchId" element={<ProtectedRoute><PhysicalInspectionForm /></ProtectedRoute>} />
-        <Route path="/quality-control/:batchId" element={<ProtectedRoute><QualityControlForm /></ProtectedRoute>} />
+        <Route path="/quality-control/batch/:batchId" element={<ProtectedRoute><BatchAnalysisDetail /></ProtectedRoute>} />
+        <Route path="/quality-control/physical/:batchId/:bottleId" element={<ProtectedRoute><PhysicalInspectionForm /></ProtectedRoute>} />
+        <Route path="/quality-control/:batchId/:bottleId" element={<ProtectedRoute><QualityControlForm /></ProtectedRoute>} />
 
         {/* Recipient Routes */}
         <Route path="/recipients" element={<ProtectedRoute><RecipientList /></ProtectedRoute>} />

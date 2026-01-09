@@ -389,6 +389,8 @@ export const MOCK_QC_RECORDS: QualityControlRecord[] = [
   {
     id: 'qc1',
     batchId: 'l1',
+    // Added missing bottleId
+    bottleId: 'b5',
     inspectorName: 'Q.F.B. Ricardo Perez',
     inspectionDate: '2023-11-16',
     acidityDornic: 4,
@@ -405,6 +407,8 @@ export const MOCK_QC_RECORDS: QualityControlRecord[] = [
   {
     id: 'qc3',
     batchId: 'l3',
+    // Added missing bottleId
+    bottleId: 'b6',
     inspectorName: 'Q.F.B. Ricardo Perez',
     inspectionDate: '2023-10-08',
     acidityDornic: 3,
@@ -420,6 +424,8 @@ export const MOCK_QC_RECORDS: QualityControlRecord[] = [
   {
     id: 'qc4',
     batchId: 'l4',
+    // Added missing bottleId
+    bottleId: 'b7',
     inspectorName: 'Q.F.B. Ricardo Perez',
     inspectionDate: '2023-09-18',
     acidityDornic: 9, // Rejected

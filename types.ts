@@ -128,7 +128,7 @@ export interface Bottle {
   collectionDate: string;
   volume: number; 
   hospitalInitials: string;
-  status: 'COLLECTED' | 'ASSIGNED' | 'DISCARDED';
+  status: 'COLLECTED' | 'ASSIGNED' | 'DISCARDED' | 'APPROVED' | 'REJECTED';
   milkType: MilkType;
   batchId?: string;
   collectionDateTime?: string;
@@ -138,11 +138,14 @@ export interface Bottle {
   responsibleName?: string;
   observations?: string;
   storageLocation?: string;
+  physicalInspectionId?: string;
+  qualityControlId?: string;
 }
 
 export interface PhysicalInspectionRecord {
   id: string;
   batchId: string;
+  bottleId: string; 
   inspectorName: string;
   inspectionDate: string;
   containerState: {
@@ -161,6 +164,7 @@ export interface PhysicalInspectionRecord {
 export interface QualityControlRecord {
   id: string;
   batchId: string;
+  bottleId: string; 
   inspectorName: string;
   inspectionDate: string;
   acidityDornic: number;
@@ -187,6 +191,8 @@ export interface Batch {
   bottles: string[];
   qualityControlId?: string;
   physicalInspectionId?: string;
+  justificationForExtraDonors?: string;
+  authorizerName?: string;
 }
 
 export interface Recipient {
@@ -217,8 +223,9 @@ export interface AdministrationRecord {
 export interface DiscardRecord {
   id: string;
   batchId: string;
+  bottleId?: string;
   volumeDiscarded: number;
-  reason: 'EXPIRATION' | 'CONTAMINATION' | 'DOSAGE_ERROR' | 'OTHER';
+  reason: 'EXPIRATION' | 'CONTAMINATION' | 'DOSAGE_ERROR' | 'QUALITY_REJECTION' | 'OTHER';
   date: string;
   discardedBy: string;
 }

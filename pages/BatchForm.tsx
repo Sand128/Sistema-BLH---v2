@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ChevronLeft, Save, Milk, Search, ArrowUpDown, 
   Clock, User, Droplets, Hash, Calendar, CheckSquare, Square,
-  AlertTriangle
+  AlertTriangle, ShieldCheck, Users, Info
 } from 'lucide-react';
 import { batchService } from '../services/batchService';
+import { authService } from '../services/authService';
 import { Bottle } from '../types';
 import { Button } from '../components/ui/Button';
 
@@ -14,6 +15,7 @@ type SortKey = keyof Bottle;
 
 export const BatchForm: React.FC = () => {
   const navigate = useNavigate();
+  const currentUser = authService.getCurrentUser();
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState<'HOMOLOGOUS' | 'HETEROLOGOUS'>('HETEROLOGOUS');
   const [availableBottles, setAvailableBottles] = useState<Bottle[]>([]);
@@ -21,6 +23,10 @@ export const BatchForm: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  
+  // Exception handling for >3 donors
+  const [justification, setJustification] = useState('');
+  const [authorizer, setAuthorizer] = useState('');
 
   useEffect(() => {
     const fetchBottles = async () => {
@@ -67,7 +73,6 @@ export const BatchForm: React.FC = () => {
   const filteredAndSortedBottles = useMemo(() => {
     let result = [...availableBottles];
 
-    // Search
     if (searchTerm) {
       const lowerSearch = searchTerm.toLowerCase();
       result = result.filter(b => 
@@ -78,7 +83,6 @@ export const BatchForm: React.FC = () => {
       );
     }
 
-    // Sort
     if (sortConfig) {
       result.sort((a: any, b: any) => {
         if (a[sortConfig.key] < b[sortConfig.key]) {
@@ -94,6 +98,14 @@ export const BatchForm: React.FC = () => {
     return result;
   }, [availableBottles, searchTerm, sortConfig]);
 
+  const uniqueDonors = useMemo(() => {
+      const selected = availableBottles.filter(b => selectedBottles.has(b.id));
+      const donorIds = new Set(selected.map(b => b.donorId));
+      return donorIds.size;
+  }, [selectedBottles, availableBottles]);
+
+  const isExceedingDonorLimit = uniqueDonors > 3;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedBottles.size === 0) {
@@ -101,12 +113,19 @@ export const BatchForm: React.FC = () => {
       return;
     }
 
+    if (isExceedingDonorLimit && (!justification.trim() || !authorizer.trim())) {
+        setError("Para lotes con más de 3 donadoras, la justificación y el autorizador son campos obligatorios.");
+        return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       await batchService.create({
         type,
-        selectedBottleIds: Array.from(selectedBottles)
+        selectedBottleIds: Array.from(selectedBottles),
+        justificationForExtraDonors: isExceedingDonorLimit ? justification : undefined,
+        authorizerName: isExceedingDonorLimit ? authorizer : undefined
       });
       navigate('/batches');
     } catch (error: any) {
@@ -145,7 +164,56 @@ export const BatchForm: React.FC = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Configuration Section */}
+        
+        {/* Donor Limit Warning Alert */}
+        {isExceedingDonorLimit && (
+            <div className="bg-orange-50 border-l-8 border-orange-500 rounded-2xl p-6 shadow-md animate-in slide-in-from-top-4 duration-300">
+                <div className="flex items-start gap-5">
+                    <div className="p-3 bg-orange-100 rounded-2xl text-orange-600">
+                        <Users className="h-8 w-8" />
+                    </div>
+                    <div className="flex-1">
+                        <h3 className="text-lg font-black text-orange-900 uppercase tracking-tight">Límite de Donadoras Rebasado</h3>
+                        <p className="text-orange-800 mt-1 font-medium">
+                            Se han detectado <span className="font-black text-xl">{uniqueDonors}</span> donadoras únicas en la selección. 
+                            La normativa estándar establece un máximo de 3 donadoras por lote para garantizar la homogeneidad y seguridad biológica.
+                        </p>
+                        
+                        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6 bg-white/50 p-6 rounded-xl border border-orange-200">
+                            <div className="space-y-2">
+                                <label className="block text-xs font-black text-orange-900 uppercase tracking-widest">Justificación Técnica Obligatoria</label>
+                                <textarea 
+                                    className="w-full p-3 border-2 border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none text-sm bg-white"
+                                    rows={2}
+                                    placeholder="Explique el motivo del excedente (ej. urgencia clínica, frascos de volumen mínimo)..."
+                                    value={justification}
+                                    onChange={(e) => setJustification(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="block text-xs font-black text-orange-900 uppercase tracking-widest">Responsable que Autoriza</label>
+                                <div className="relative">
+                                    <ShieldCheck className="absolute left-3 top-3 h-5 w-5 text-orange-400" />
+                                    <input 
+                                        type="text"
+                                        className="w-full pl-11 pr-4 py-3 border-2 border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none text-sm font-bold bg-white"
+                                        placeholder="Nombre del Médico Responsable / Supervisor"
+                                        value={authorizer}
+                                        onChange={(e) => setAuthorizer(e.target.value)}
+                                        required
+                                    />
+                                </div>
+                                <p className="text-[10px] text-orange-600 font-bold uppercase italic mt-1 flex items-center gap-1">
+                                    <Info className="h-3 w-3" /> Este registro quedará vinculado permanentemente a la auditoría del lote.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 bg-white shadow-md rounded-2xl p-8 border border-slate-200">
              <div className="flex items-center gap-3 mb-6">
@@ -184,15 +252,6 @@ export const BatchForm: React.FC = () => {
                       <span className="text-[10px] text-slate-500 font-medium leading-tight">Donadora Única</span>
                     </label>
                   </div>
-                  {type === 'HOMOLOGOUS' && (
-                    <div className="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-2">
-                       {/* Fix: AlertTriangle is now imported */}
-                       <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                       <p className="text-[10px] text-amber-800 font-bold leading-normal uppercase">
-                         Restricción: Todos los frascos seleccionados deben pertenecer a la misma donadora.
-                       </p>
-                    </div>
-                  )}
                 </div>
 
                 <div className="bg-slate-900 rounded-2xl p-6 text-white relative overflow-hidden shadow-xl">
@@ -202,8 +261,10 @@ export const BatchForm: React.FC = () => {
                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Métricas del Lote</p>
                    <div className="space-y-4">
                       <div className="flex justify-between items-end border-b border-white/10 pb-2">
-                         <span className="text-xs font-bold text-slate-400 uppercase">Frascos</span>
-                         <span className="text-2xl font-black text-primary-400">{selectedBottles.size}</span>
+                         <span className="text-xs font-bold text-slate-400 uppercase">Donadoras</span>
+                         <span className={`text-2xl font-black ${uniqueDonors > 3 ? 'text-orange-400' : 'text-primary-400'}`}>
+                             {uniqueDonors}
+                         </span>
                       </div>
                       <div className="flex justify-between items-end">
                          <span className="text-xs font-bold text-slate-400 uppercase">Volumen Total</span>
@@ -232,24 +293,17 @@ export const BatchForm: React.FC = () => {
                       onChange={(e) => setSearchTerm(e.target.value)}
                    />
                 </div>
-                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                   <p className="text-[10px] text-blue-800 font-bold uppercase leading-tight">
-                     Sugerencia: Utilice el folio (HO/HE) para una identificación rápida de muestras físicas.
-                   </p>
-                </div>
              </div>
           </div>
         </div>
 
         {error && (
           <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-2xl flex items-center gap-3 animate-in shake">
-            {/* Fix: AlertTriangle is now imported */}
             <AlertTriangle className="h-6 w-6 text-red-600" />
             <p className="text-sm text-red-800 font-black uppercase tracking-tight">{error}</p>
           </div>
         )}
 
-        {/* Bottles Selection Table */}
         <div className="bg-white shadow-xl rounded-2xl border border-slate-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
@@ -381,8 +435,8 @@ export const BatchForm: React.FC = () => {
           <Button 
             type="submit" 
             isLoading={loading} 
-            disabled={selectedBottles.size === 0} 
-            className="w-72 h-14 bg-primary-600 hover:bg-primary-700 shadow-xl shadow-primary-200 text-lg"
+            disabled={selectedBottles.size === 0 || (isExceedingDonorLimit && (!justification.trim() || !authorizer.trim()))} 
+            className={`w-72 h-14 shadow-xl text-lg ${isExceedingDonorLimit ? 'bg-orange-600 hover:bg-orange-700 shadow-orange-200' : 'bg-primary-600 hover:bg-primary-700 shadow-primary-200'}`}
           >
             <Save className="h-6 w-6 mr-3" />
             Confirmar y Crear Lote
