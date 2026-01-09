@@ -118,7 +118,7 @@ export const QualityControlForm: React.FC = () => {
                     />
                     {Number(formData.acidityDornic) > 8 && (
                         <p className="text-sm text-red-700 mt-2 font-bold flex items-center bg-red-50 p-2 rounded">
-                            <AlertTriangle className="h-4 w-4 mr-2" /> Acidez > 8°D (Rechazo)
+                            <AlertTriangle className="h-4 w-4 mr-2" /> Acidez mayor 8°D (Rechazo)
                         </p>
                     )}
                     {Number(formData.acidityDornic) > 0 && Number(formData.acidityDornic) <= 8 && (

@@ -68,7 +68,7 @@ export const Login: React.FC = () => {
         {/* Encabezado con Imagen Institucional */}
         <div className="w-full mb-8">
            <img 
-             src="encabezado isem.png" 
+             src="/components/image/logos_isem.png" 
              alt="Gobierno del Estado de México - Salud - ISEM" 
              className="h-16 sm:h-20 object-contain mx-auto lg:mx-0"
            />
@@ -161,7 +161,7 @@ export const Login: React.FC = () => {
                © {new Date().getFullYear()} Banco de Leche Humana. Todos los derechos reservados.
              </p>
              <img 
-               src="pie isem.png" 
+               src="/components/image/cintillo.svg" 
                alt="Decoración Institucional" 
                className="w-full object-contain"
              />
